@@ -26,7 +26,6 @@ def py_which(cmd, mode=os.F_OK | os.X_OK, path=None):
     `mode` defaults to os.F_OK | os.X_OK. `path` defaults to the result
     of os.environ.get("PATH"), or can be overridden with a custom search
     path.
-
     """
     # Check that a given file can be accessed with the correct mode.
     # Additionally check that `file` is not a directory, as on Windows
@@ -275,7 +274,7 @@ def make_basename(readfiles,prefix=None):
 
 
 def spades(genes,run_dir,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=None,unpaired=False):
-    "Run SPAdes on each gene separately using GNU paralell."""
+    "Run SPAdes on each gene separately using GNU parallel."""
 
     with open(spades_genefilename,'w') as spadesfile:
         spadesfile.write("\n".join(genes)+"\n")
@@ -617,8 +616,8 @@ def main():
             return
     else:
         blastx_outputfile = basename+".blastx"
-    #Distribute
 
+    #Distribute
     if args.distribute:
         pre_existing_fastas = glob.glob("./*/*_interleaved.fasta") + glob.glob("./*/*_unpaired.fasta")
         for fn in pre_existing_fastas:
@@ -626,15 +625,13 @@ def main():
         if args.bwa:
             exitcode = distribute_bwa(bamfile,readfiles,baitfile,run_dir,args.target,unpaired_readfile,args.exclude)
         else:
-            exitcode=    distribute(blastx_outputfile,readfiles,baitfile,run_dir,args.target,unpaired_readfile,args.exclude)
+            exitcode = distribute(blastx_outputfile,readfiles,baitfile,run_dir,args.target,unpaired_readfile,args.exclude)
         if exitcode:
             sys.exit(1)
     if len(readfiles) == 2:
-
         genes = [x for x in os.listdir(".") if os.path.isfile(os.path.join(x,x+"_interleaved.fasta"))]
     else:
         genes = [x for x in os.listdir(".") if os.path.isfile(os.path.join(x,x+"_unpaired.fasta"))]
-    #genes = ["gene008"]
     print("READFILES:\n")
     print(readfiles)
     if len(genes) == 0:
@@ -662,7 +659,6 @@ def main():
                 spades_genelist = spades(genes,run_dir,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,timeout=args.timeout,unpaired=True)
             else:
                 spades_genelist = spades(genes,run_dir,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,timeout=args.timeout)
-
         else:
             print("ERROR: Please specify either one (unpaired) or two (paired) read files! Exiting!")
             return
