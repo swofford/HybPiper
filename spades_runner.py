@@ -91,7 +91,6 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
 
     genes_redos = []
 
-    all_redo_kmers = []
     restart_ks = []
     for gene in genes:
         all_kmers = [int(x[1:]) for x in os.listdir(os.path.join(gene,"{}_spades".format(gene))) if x.startswith("K")]
