@@ -32,17 +32,7 @@ def make_spades_cmd(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,redo=F
 
     spades_cmd = " ".join(parallel_cmd_list) + " " + " ".join(spades_cmd_list)
     return spades_cmd
-#     if cpu:
-#         if kvals:
-#             spades_cmd = "time parallel -j {} --eta spades.py --only-assembler -k {} --threads 1 --cov-cutoff {} {} {{}}/{{}}_interleaved.fasta -o {{}}/{{}}_spades :::: {} > spades.log".format(cpu,kvals,cov_cutoff,fileflag,genelist)
-#         else:
-#             spades_cmd = "time parallel -j {} --eta spades.py --only-assembler --threads 1 --cov-cutoff {} {} {{}}/{{}}_interleaved.fasta -o {{}}/{{}}_spades :::: {} > spades.log".format(cpu,cov_cutoff,fileflag,genelist)
-#     else:
-#         if kvals:
-#             spades_cmd = "time parallel --eta spades.py --only-assembler -k {} --threads 1 --cov-cutoff {} {} {{}}/{{}}_interleaved.fasta -o {{}}/{{}}_spades :::: {} > spades.log".format(kvals,cov_cutoff,fileflag,genelist)
-#         else:
-#             spades_cmd = "time parallel --eta spades.py --only-assembler --threads 1 --cov-cutoff {} {} {{}}/{{}}_interleaved.fasta -o {{}}/{{}}_spades :::: {} > spades.log".format(cov_cutoff,fileflag,genelist)
-#     return spades_cmd
+
 
 def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=None,unpaired=False):
     "Run SPAdes on each gene separately using GNU paralell."""
@@ -77,6 +67,7 @@ def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout
             sys.stderr.write("{}\n".format(gene))
             spades_failed.append(gene)
     return spades_failed
+
 
 def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
     genes = [x.rstrip() for x in open(genelist)]
@@ -115,9 +106,6 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
     sys.stderr.write("Re-running SPAdes for {} genes\n".format(len(genes_redos)))
     sys.stderr.write(redo_spades_cmd+"\n")
     exitcode = subprocess.call(redo_spades_cmd,shell=True)
-
-
-
     if exitcode:
         sys.stderr.write("ERROR: One or more genes had an error with SPAdes assembly. This may be due to low coverage. No contigs found for the following genes:\n")
 
@@ -138,8 +126,6 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
         spades_duds_file.write("\n".join(spades_duds))
 
     return spades_failed,spades_duds
-
-
 
 
 def main():
