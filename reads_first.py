@@ -339,7 +339,7 @@ def spades(genes,run_dir,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=No
     spades_genelist = []
     for gene in genes:
 #        if gene not in set(spades_failed):
-        if gene not in set(spades_duds):
+        if gene not in spades_duds:
 #                if gene not in set(spades_failed_redos):
             spades_genelist.append(gene)
 
