@@ -24,11 +24,11 @@ def initial_exonerate(proteinfilename, assemblyfilename,prefix):
     """Conduct exonerate search, returns a dictionary of results.
     Using the ryo option in exonerate, the header should contain all the useful information."""
     logger = logging.getLogger("pipeline")
-    
+
     outputfilename = "%s/exonerate_results.fasta" %prefix
     exonerate_ryo = '">%ti,%qi,%qab,%qae,%pi,(%tS),%tab,%tae\\n%tcs\\n"'
     exonerate_command = "exonerate -m protein2genome --showalignment no --showvulgar no -V 0 --ryo %s %s %s >%s" % (exonerate_ryo,proteinfilename,assemblyfilename,outputfilename)
-    
+
     logger.debug(exonerate_command)
     #print exonerate_ryo
     #proc = subprocess.Popen(['exonerate','-m','protein2genome','--showalignment','no','-V','0','--showvulgar','no','--ryo',exonerate_ryo,proteinfilename,assemblyfilename])
@@ -37,11 +37,11 @@ def initial_exonerate(proteinfilename, assemblyfilename,prefix):
     #proc.wait()
     records = SeqIO.to_dict(SeqIO.parse(outputfilename,'fasta'))
     #proc.stdout.close()
-    
+
     return records
 
 def protein_sort(records):
-    """Given the Biopython dictionary, return a dictionary of proteins indexed by their hits.""" 
+    """Given the Biopython dictionary, return a dictionary of proteins indexed by their hits."""
     proteinHits = {}
     for contig in records:
         hit = records[contig].id.split(",")
@@ -73,25 +73,25 @@ def sort_key(elem):
 def get_contig_order(prot):
     """Given the dictionary of hits for a protein, return the dictionary with the fields sorted by start location."""
     logger = logging.getLogger("pipeline")
-    
+
     tuplist =[(prot["hit_start"][i],prot["hit_end"][i],float(prot["assemblyHits"][i].split(",")[0].split("_")[5])) for i in range(len(prot["hit_start"]))]
     logger.debug("before sorting: {}".format(" ".join(prot["assemblyHits"])))
     logger.debug( tuplist )
     sorting_order = sorted(list(range(len(tuplist))),key=lambda k:sort_key(tuplist[k]))
-    
+
     prot["assemblyHits"] = [prot["assemblyHits"][i] for i in sorting_order]
     prot["hit_start"] = [prot["hit_start"][i] for i in sorting_order]
     prot["hit_end"] = [prot["hit_end"][i] for i in sorting_order]
     prot["percentid"] = [prot["percentid"][i] for i in sorting_order]
     prot["hit_strand"] = [prot["hit_strand"][i] for i in sorting_order]
-    
-    logger.debug("After sorting: {}".format(" ".join(prot["assemblyHits"])))    
+
+    logger.debug("After sorting: {}".format(" ".join(prot["assemblyHits"])))
     return prot
 
 def filter_by_percentid(prot,thresh):
     """Given a protein dictionary, return a protein dictionary minus entries with percentID below a threshold"""
     kept_indicies = [i for i in range(len(prot["percentid"])) if prot["percentid"][i] > thresh]
-    return keep_indicies(kept_indicies,prot)        
+    return keep_indicies(kept_indicies,prot)
 
 def supercontig_exonerate(supercontig,protseq,prefix,thresh=55):
     """Given a long, joined contig and a protein sequence, return the exonerate hit(s)"""
@@ -132,9 +132,9 @@ def write_exonerate_stats(contig_id_list,prefix):
     with open("{}/exonerate_stats.csv".format(prefix),'w') as exonerate_statsfile:
         exonerate_statsfile.write("\n".join(contig_id_list)+'\n')
 
-    
+
 def fullContigs(prot,sequence_dict,assembly_dict,protein_dict,prefix,thresh=55):
-    """Generates a contig from all hits to a protein. 
+    """Generates a contig from all hits to a protein.
     If more than one hit, conduct a second exonerate search with the original contigs
     stitched together."""
     logger = logging.getLogger("pipeline")
@@ -142,12 +142,12 @@ def fullContigs(prot,sequence_dict,assembly_dict,protein_dict,prefix,thresh=55):
     numHits = len(prot["assemblyHits"])
     sequence_list = []
     contigHits = []
-    
+
     logger.debug("All hits:")
     logger.debug(prot["assemblyHits"])
     write_exonerate_stats(prot["assemblyHits"],prefix)
 
-    
+
     #print numHits
     if numHits == 1:
         #if prot["hit_strand"][0] == "+":
@@ -196,9 +196,9 @@ def fullContigs(prot,sequence_dict,assembly_dict,protein_dict,prefix,thresh=55):
 
     #Get rid of supercontig sequences that are subsumed by longer sequences on the same stretch.
     joined_supercontig_cds = subsume_supercontigs(joined_supercontig_cds)
-    
-    
-    SeqIO.write(joined_supercontig_cds,'%s/supercontig_exonerate.fasta'%prefix,'fasta') 
+
+
+    SeqIO.write(joined_supercontig_cds,'%s/supercontig_exonerate.fasta'%prefix,'fasta')
     if len(joined_supercontig_cds) == 1:
         logger.debug("One sequence remaining")
         return str(joined_supercontig_cds[0].seq)
@@ -208,10 +208,10 @@ def fullContigs(prot,sequence_dict,assembly_dict,protein_dict,prefix,thresh=55):
     #final_supercontig = [x for x in supercontig_exonerate(superdupercontig,protein_dict[prot["name"]],prefix)]
     #final_supercontig.sort(key=sort_byhitloc)
     #final_supercontig = subsume_supercontigs(final_supercontig)
-    
-    
+
+
     #return str(Seq("".join(str(b.seq) for b in final_supercontig)))
-    return str(Seq("".join(str(b.seq) for b in joined_supercontig_cds)))        
+    return str(Seq("".join(str(b.seq) for b in joined_supercontig_cds)))
     #print joined_supercontig_cds
     #print ""
     #return joined_supercontig_cds
@@ -262,7 +262,7 @@ def overlapping_contigs(prot,length_pct,depth_multiplier):
     and save only those contigs that are not completely subsumed by other contigs."""
     logger = logging.getLogger("pipeline")
     range_list = [(prot["hit_start"][i],prot["hit_end"][i]) for i in range(len(prot["hit_start"]))]
-    
+
     logger.debug(range_list)
     kept_indicies = range_connectivity(range_list,prot["assemblyHits"],prot_length = prot["reflength"],length_pct = length_pct,depth_multiplier=depth_multiplier)
     logger.debug(kept_indicies)
@@ -280,7 +280,7 @@ def best_by_percent_id(assemblyHits,full_length_indicies):
             to_keep = full_length_indicies[i]
             max_percentid = percentid
     return to_keep
-    
+
 def best_by_depth(assemblyHits,full_length_indicies,thresh=10):
     '''If one contig has a depth that is 10x more than all the others, return that one, else return None'''
     logger=logging.getLogger("pipeline")
@@ -291,29 +291,29 @@ def best_by_depth(assemblyHits,full_length_indicies,thresh=10):
     logger.debug(depths)
     depth_threshold = depths[0][1] / thresh
     logger.debug("Depth threshold: {}".format(depth_threshold))
-    top_depth_best = all(i[1] <= depth_threshold for i in depths[1:]) 
+    top_depth_best = all(i[1] <= depth_threshold for i in depths[1:])
     if top_depth_best:
         best_depth_contig = depths[0][0]
         logger.debug("Contig {} with depth {} is more than {} times greater depth than other contigs".format(best_depth_contig,depths[0][1],thresh))
         return best_depth_contig
     logger.debug("All contigs have similar depth")
 
-    return None    
+    return None
 
 
 def range_connectivity(range_list,assemblyHits=None,prot_length=None,length_pct = 1,depth_multiplier = None,use_depth=False):
     """Given two sorted lists, representing the beginning and end of a range,
     Determine "connectivity" between consecutive elements of the list.
     For each connected segment, determine whether one segement "subsumes" the other."""
-    
+
     logger = logging.getLogger("pipeline")
 
     starts = [a[0] for a in range_list]
     ends = [a[1] for a in range_list]
-    
+
     if depth_multiplier:
         use_depth = True
-    
+
     subsumed_ranges = []
     collapsed_ranges = []
     full_length_indicies = []
@@ -322,10 +322,10 @@ def range_connectivity(range_list,assemblyHits=None,prot_length=None,length_pct 
         max_length = prot_length
     else:
         max_length = max(ends) - min(starts)
-    
+
     for i in range(len(range_list)):
             if abs(starts[i] - ends[i]) > max_length * length_pct:
-                logger.debug("including long contig {}".format(range_list[i]))    
+                logger.debug("including long contig {}".format(range_list[i]))
                 full_length_indicies.append(i)
                 subsumed_ranges = [range_list[i]]
             elif starts[i] == min(starts) and ends[i] == max(ends):
@@ -337,7 +337,7 @@ def range_connectivity(range_list,assemblyHits=None,prot_length=None,length_pct 
                     logger.debug("removing {}".format(range_list[i]))
                 else:
                     subsumed_ranges.append(range_list[i])
-    
+
     #If there are multiple full length hits, return the one with the best percent identity.
     if assemblyHits:
         if len(full_length_indicies) > 1:
@@ -346,12 +346,12 @@ def range_connectivity(range_list,assemblyHits=None,prot_length=None,length_pct 
                 if to_keep:
                     return [to_keep]
                 else:
-                    to_keep = best_by_percent_id(assemblyHits,full_length_indicies)        
+                    to_keep = best_by_percent_id(assemblyHits,full_length_indicies)
                     return [to_keep]
             else:
-                to_keep = best_by_percent_id(assemblyHits,full_length_indicies)        
+                to_keep = best_by_percent_id(assemblyHits,full_length_indicies)
                 return [to_keep]
-                                
+
     #If multiple contigs start at the same minimum (or end at the same maximum), keep the longest ones.
     subsumed_indices=[]
     if len(subsumed_ranges) > 1:
@@ -366,26 +366,26 @@ def range_connectivity(range_list,assemblyHits=None,prot_length=None,length_pct 
         subsumed_set = set(subsumed_indices)
         kept_indices = [x for x in range(len(subsumed_ranges)) if x not in subsumed_set]
         return kept_indices
-                    
+
 #         for j in range(len(subsumed_ranges)):
 #             if subsumed_ranges[j][0] == min(starts):
 #                 if subsumed_ranges[j][1] > best_start_end:
 #                     best_start_end = subsumed_ranges[j][1]
 #                     longest_left = j
-# 
+#
 #             elif subsumed_ranges[j][1] == max(ends):
 #                 if subsumed_ranges[j][0] < best_end_start:
 #                     best_end_start = subsumed_ranges[j][0]
 #                     longest_right = j
 #             else:
 #                 collapsed_ranges.append(subsumed_ranges[j])
-        
+
 #         logger.debug("Best end start: {}".format(best_end_start))
 #         logger.debug("Best start end: {}".format(best_start_end))
 #         collapsed_ranges.append(subsumed_ranges[longest_left])
 #         collapsed_ranges.append(subsumed_ranges[longest_right])
     else:
-        collapsed_ranges = subsumed_ranges        
+        collapsed_ranges = subsumed_ranges
 
     if False: #num_breaks == 0:
         kept_indicies = [range_list.index(i) for i in connected_ranges]
@@ -401,8 +401,8 @@ def range_connectivity(range_list,assemblyHits=None,prot_length=None,length_pct 
                 flattened_list.append(collapsed_ranges[a])
         kept_indicies = [range_list.index(i) for i in flattened_list]
         return kept_indicies
-    
-        
+
+
 def tuple_overlap(a,b):
     """Given two tuples of length two, determine if the ranges overlap"""
     return a[0] < b[0] < a[1] or b[0] < a[0] < b[1]
@@ -433,11 +433,11 @@ def reciprocal_best_hit(prot,proteinHits):
                     full_contigname = [b for b in proteinHits[otherProt]["assemblyHits"] if contigname in b][0]
                     logger.debug("%s %s" %(contig, full_contigname))
                     otherHit_idx = proteinHits[otherProt]["assemblyHits"].index(full_contigname)
-                    
+
                     target_ranges = [sorted((prot["target_begin"][contig_idx],prot["target_end"][contig_idx])),sorted((proteinHits[otherProt]["target_begin"][otherHit_idx],proteinHits[otherProt]["target_end"][otherHit_idx]))]
                     logger.debug(repr(target_ranges))
                     #Check that the two contig hits have overlapping ranges.
-                    if tuple_overlap(target_ranges[0],target_ranges[1]):                 
+                    if tuple_overlap(target_ranges[0],target_ranges[1]):
                         logger.debug("%s %s"%(repr(prot["percentid"][contig_idx]),repr(proteinHits[otherProt]["percentid"][otherHit_idx])))
                         if prot["percentid"][contig_idx] < proteinHits[otherProt]["percentid"][otherHit_idx]:
                             logger.debug("contig %s is a better hit to %s" %(contigname,otherProt))
@@ -446,7 +446,7 @@ def reciprocal_best_hit(prot,proteinHits):
                         logger.debug("ranges did not overlap")
         if maxProt == protname:
             kept_indicies.append(contig_idx)
-    return keep_indicies(kept_indicies,prot)        
+    return keep_indicies(kept_indicies,prot)
 
 def paralog_test(exonerate_hits,prot,prefix):
     """Gives a warning if there are multiple hits of long length to the same protein"""
@@ -462,7 +462,7 @@ def paralog_test(exonerate_hits,prot,prefix):
         with open("{}/paralog_warning.txt".format(prefix),'w') as pw:
             for hit in range(len(exonerate_hits["assemblyHits"])):
                 if longhits[hit]:
-                    pw.write(prot.id+ "\t"+exonerate_hits["assemblyHits"][hit] + "\n")    
+                    pw.write(prot.id+ "\t"+exonerate_hits["assemblyHits"][hit] + "\n")
 
 def myTranslate(nucl):
     """Given a raw sequence of nucleotides, return raw sequence of amino acids."""
@@ -480,10 +480,10 @@ def help():
     print("The program Exonerate must be in your $PATH.")
     print("You must have BioPython installed")
     print("A protein and a nucleotide directory will be created in the current directory with the prefix.")
-    return    
+    return
 
-def main(): 
-    
+def main():
+
     parser = argparse.ArgumentParser(description="exonerate_hits.py; Generate gene-by-gene protein and nucleotide files from Bait Capture Assembly")
     #parser.add_argument("-v", "--verbose",help="Report progress of pipeline to stdout",
     #    action="store_const",dest="loglevel",const=logging.INFO, default=logging.WARNING)
@@ -491,15 +491,15 @@ def main():
         action="store_true",dest="loglevel",default=False)
     parser.add_argument("proteinfile",help="FASTA file containing one 'bait' sequence per protein.")
     parser.add_argument("assemblyfile",help="FASTA file containing DNA sequence assembly.")
-    parser.add_argument("--prefix",help="""Prefix for directory, files, and sequences generated from this assembly. 
+    parser.add_argument("--prefix",help="""Prefix for directory, files, and sequences generated from this assembly.
             If not specified, will be extracted from assembly file name.""",default=None)
     parser.add_argument("--no_sequences",help="Do not generate protein and nucleotide sequence files.", action="store_true",default=False)
     parser.add_argument("--first_search_filename",help="Location of previously completed Exonerate results. Useful for testing.",default="no")
     parser.add_argument("-t","--threshold",help="Threshold for Percent Identity between contigs and proteins. default = 55%%",default=55,type=int)
     parser.add_argument("--length_pct",help="Include an exonerate hit if it is at least as long as X percentage of the reference protein length. Default = 100%%",default=90,type=int)
     parser.add_argument("--depth_multiplier",help="Accept any full-length hit if it has a coverage depth X times the next best hit. Set to zero to not use depth. Default = 10",default=10,type=int)
-    
-    
+
+
     args = parser.parse_args()
 
     proteinfilename = args.proteinfile
@@ -511,7 +511,7 @@ def main():
         else:
             os.mkdir(prefix)
     else:
-        prefix = os.path.basename(assemblyfilename).split(".")[0]    
+        prefix = os.path.basename(assemblyfilename).split(".")[0]
 
     logger = logging.getLogger("pipeline")
     ch = logging.StreamHandler()
@@ -531,7 +531,7 @@ def main():
     except IOError:
         print("The file %s could not be opened!" %proteinfilename)
         return()
-        
+
     try:
         assemblyfile = open(assemblyfilename)
     except IOError:
@@ -539,7 +539,7 @@ def main():
         return()
     assembly_dict = SeqIO.to_dict(SeqIO.parse(assemblyfile,'fasta'))
     protein_dict = SeqIO.to_dict(SeqIO.parse(proteinfile,'fasta'))
-    
+
     if os.path.exists(args.first_search_filename):     #Shortcut for Testing purposes
         logger.info("Reading initial exonerate results from file {}.".format(first_search_filename))
         sequence_dict = SeqIO.to_dict(SeqIO.parse(first_search_filename,'fasta'))
@@ -550,7 +550,7 @@ def main():
 
     sys.stderr.write("There were {} exonerate hits for {}.\n".format(len(sequence_dict),proteinfilename))
     #print "There were %i unique proteins hit." % len(proteinHits)
-    
+
     directory_name = "%s/sequences/FNA" % prefix
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)
@@ -558,7 +558,7 @@ def main():
     directory_name = "%s/sequences/FAA" % prefix
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)
-    
+
     for prot in proteinHits:
         sys.stderr.write(prot)
         logger.debug(prot)
@@ -569,7 +569,7 @@ def main():
 
         paralog_test(proteinHits[prot],protein_dict[prot],prefix)
         proteinHits[prot]["reflength"] = len(protein_dict[prot])
-        
+
         proteinHits[prot] = get_contig_order(proteinHits[prot])
 #         logger.debug("After get_contig_order: %s" % " ".join(proteinHits[prot]["assemblyHits"]))
         logger.debug("After get_contig_order: %d" % len(proteinHits[prot]["assemblyHits"]))
@@ -581,7 +581,7 @@ def main():
         if len(proteinHits[prot]["assemblyHits"]) == 0:
             report_no_sequences(proteinHits[prot]["name"])
             continue        #All hits have been filtered out
-         
+
          #Filter out contigs with a hit below a threshold
         proteinHits[prot] = filter_by_percentid(proteinHits[prot],args.threshold)
 #         logger.debug("After filter_by_percent_id: %s" % " ".join(proteinHits[prot]["assemblyHits"]))
@@ -589,12 +589,12 @@ def main():
         if len(proteinHits[prot]["assemblyHits"]) == 0:
             report_no_sequences(proteinHits[prot]["name"])
             continue        #All hits have been filtered out
-         
+
          #Delete contigs if their range is completely subsumed by another hit's range.
         proteinHits[prot] = overlapping_contigs(proteinHits[prot],args.length_pct*0.01,args.depth_multiplier)
 #         logger.debug("After overlapping_contigs: %s" % " ".join(proteinHits[prot]["assemblyHits"]))
         logger.debug("After overlapping_contigs: %d" % len(proteinHits[prot]["assemblyHits"]))
-         #Stitch together a "supercontig" containing all the hits and conduct a second exonerate search.    
+         #Stitch together a "supercontig" containing all the hits and conduct a second exonerate search.
         if len(proteinHits[prot]["assemblyHits"]) == 0:
             report_no_sequences(proteinHits[prot]["name"])
             continue        #All hits have been filtered out
@@ -615,16 +615,16 @@ def main():
                 amino_file = open(amino_filename,'w')
                 amino_file.write(">%s\n%s\n" % (seqID,amino_sequence))
                 amino_file.close()
-        
+
                 nucleo_filename = "%s/sequences/FNA/%s.FNA" % (prefix,prot.split("-")[-1])
                 nucleo_file = open(nucleo_filename,'w')
                 nucleo_file.write(">%s\n%s\n" % (seqID,nucl_sequence))
                 nucleo_file.close()
-#      if "temp.contig.fa" in os.listdir(prefix):    
+#      if "temp.contig.fa" in os.listdir(prefix):
 #         os.remove("%s/temp.contig.fa" % prefix)
 #         os.remove("%s/temp.prot.fa" % prefix)
     proteinfile.close()
     assemblyfile.close()
-    
+
 
 if __name__ == "__main__":main()

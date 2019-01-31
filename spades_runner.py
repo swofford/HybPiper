@@ -16,8 +16,8 @@ def make_spades_cmd(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,redo=F
     if cpu:
         parallel_cmd_list.append("-j {}".format(cpu))
     if timeout:
-        parallel_cmd_list.append("--timeout {}%".format(timeout))    
-    
+        parallel_cmd_list.append("--timeout {}%".format(timeout))
+
     spades_cmd_list = ["spades.py --only-assembler --threads 1 --cov-cutoff",str(cov_cutoff)]
     if kvals:
         spades_cmd_list.append("-k {}".format(kvals))
@@ -26,12 +26,12 @@ def make_spades_cmd(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,redo=F
     if paired:
         spades_cmd_list.append("--12 {}/{}_interleaved.fasta")
     else:
-        spades_cmd_list.append("-s {}/{}_unpaired.fasta")    
-    
+        spades_cmd_list.append("-s {}/{}_unpaired.fasta")
+
     spades_cmd_list.append("-o {{}}/{{}}_spades :::: {} > spades.log".format(genelist))
-    
+
     spades_cmd = " ".join(parallel_cmd_list) + " " + " ".join(spades_cmd_list)
-    return spades_cmd 
+    return spades_cmd
 #     if cpu:
 #         if kvals:
 #             spades_cmd = "time parallel -j {} --eta spades.py --only-assembler -k {} --threads 1 --cov-cutoff {} {} {{}}/{{}}_interleaved.fasta -o {{}}/{{}}_spades :::: {} > spades.log".format(cpu,kvals,cov_cutoff,fileflag,genelist)
@@ -48,21 +48,21 @@ def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout
     "Run SPAdes on each gene separately using GNU paralell."""
     if os.path.isfile("spades.log"):
         os.remove("spades.log")
-    
+
     genes = [x.rstrip() for x in open(genelist)]
     #print paired
     spades_cmd = make_spades_cmd(genelist,cov_cutoff,cpu,paired=paired,kvals=kvals,unpaired=unpaired)
-    
+
     sys.stderr.write("Running SPAdes on {} genes\n".format(len(genes)))
     sys.stderr.write(spades_cmd + "\n")
     exitcode = subprocess.call(spades_cmd,shell=True)
 
     if exitcode:
         sys.stderr.write("ERROR: One or more genes had an error with SPAdes assembly. This may be due to low coverage. No contigs found for the following genes:\n")
-    
+
     spades_successful = []
     spades_failed = []
-    
+
     for gene in genes:
         gene_failed = False
         if os.path.isfile("{}/{}_spades/contigs.fasta".format(gene,gene)):
@@ -74,7 +74,7 @@ def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout
                 gene_failed = True
         else:
             gene_failed = True
-            
+
         if gene_failed:
             sys.stderr.write("{}\n".format(gene))
             spades_failed.append(gene)
@@ -82,49 +82,49 @@ def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout
 
 def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
     genes = [x.rstrip() for x in open(genelist)]
-    
+
     redo_cmds_file = open("redo_spades_commands.txt",'w')
-    
+
     spades_successful = []
     spades_failed = []
     spades_duds = []
-    
+
     genes_redos = []
-    
+
     all_redo_kmers = []
     restart_ks = []
     for gene in genes:
         all_kmers = [int(x[1:]) for x in os.listdir(os.path.join(gene,"{}_spades".format(gene))) if x.startswith("K")]
         all_kmers.sort()
-        
+
         if len(all_kmers) < 2:
             sys.stderr.write("WARNING: All Kmers failed for {}!\n".format(gene))
             spades_duds.append(gene)
             continue
         else:
-            genes_redos.append(gene)    
+            genes_redos.append(gene)
         redo_kmers = [str(x) for x in all_kmers[:-1]]
         restart_k = "k{}".format(redo_kmers[-1])
         kvals = ",".join(redo_kmers)
         spades_cmd = "spades.py --restart-from {} -k {} --cov-cutoff {} -o {}/{}_spades".format(restart_k,kvals,cov_cutoff,gene,gene)
         redo_cmds_file.write(spades_cmd + "\n")
-    
+
     redo_cmds_file.close()
     if cpu:
-        redo_spades_cmd = "parallel -j {} --eta --timeout 400% :::: redo_spades_commands.txt > spades_redo.log".format(cpu)     
+        redo_spades_cmd = "parallel -j {} --eta --timeout 400% :::: redo_spades_commands.txt > spades_redo.log".format(cpu)
     else:
-        redo_spades_cmd = "parallel --eta --timeout 400% :::: redo_spades_commands.txt > spades_redo.log"     
+        redo_spades_cmd = "parallel --eta --timeout 400% :::: redo_spades_commands.txt > spades_redo.log"
 
-    
+
     sys.stderr.write("Re-running SPAdes for {} genes\n".format(len(genes_redos)))
     sys.stderr.write(redo_spades_cmd+"\n")
     exitcode = subprocess.call(redo_spades_cmd,shell=True)
-    
 
-    
+
+
     if exitcode:
         sys.stderr.write("ERROR: One or more genes had an error with SPAdes assembly. This may be due to low coverage. No contigs found for the following genes:\n")
-        
+
     for gene in genes_redos:
         gene_failed = False
         if os.path.isfile("{}/{}_spades/contigs.fasta".format(gene,gene)):
@@ -135,7 +135,7 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
                 gene_failed = True
         else:
             gene_failed = True
-            
+
         if gene_failed:
             sys.stderr.write("{}\n".format(gene))
             spades_duds.append(gene)
@@ -143,7 +143,7 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
         spades_duds_file.write("\n".join(spades_duds))
 
     return spades_failed,spades_duds
-    
+
 
 
 
@@ -158,32 +158,32 @@ def main():
     parser.add_argument("--timeout",help="Use GNU Parallel to kill processes that take longer than X times the average.",default=0)
     parser.add_argument("--unpaired",help="For assembly with both paired (interleaved) and unpaired reads",action="store_true",default=False)
     args = parser.parse_args()
-    
+
     if args.single:
         is_paired = False
     else:
         is_paired = True
-    
+
     if os.path.isfile("failed_spades.txt") and args.redos_only:
         spades_failed = rerun_spades("failed_spades.txt",cpu=args.cpu,paired=is_paired)
     else:
-        if args.unpaired:       #Create empty unpaired file if it doesn't exist   
+        if args.unpaired:       #Create empty unpaired file if it doesn't exist
             for gene in open(args.genelist):
                 gene=gene.rstrip()
                 if os.path.isfile("{}/{}_interleaved.fasta".format(gene,gene)):
                     if not os.path.isfile("{}/{}_unpaired.fasta".format(gene,gene)):
                         open("{}/{}_unpaired.fasta".format(gene,gene),'a').close()
-        
-        spades_failed = spades_initial(args.genelist,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,paired=is_paired,timeout=args.timeout,unpaired=args.unpaired)    
-    
+
+        spades_failed = spades_initial(args.genelist,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,paired=is_paired,timeout=args.timeout,unpaired=args.unpaired)
+
         if len(spades_failed) > 0:
             with open("failed_spades.txt",'w') as failed_spadefile:
                 failed_spadefile.write("\n".join(spades_failed))
-        
+
             spades_failed,spades_duds = rerun_spades("failed_spades.txt",cov_cutoff=args.cov_cutoff,paired=is_paired,cpu=args.cpu)
             if len(spades_failed) == 0:
                 sys.stderr.write("All redos completed successfully!\n")
             else:
                 sys.exit(1)
-    
+
 if __name__ == "__main__":main()

@@ -96,7 +96,7 @@ def check_dependencies():
                         "samtools"]
 
     python_packages =     ["Bio"]
-    
+
     everything_is_awesome = True
     for e in executables:
         e_loc = py_which(e)
@@ -105,7 +105,7 @@ def check_dependencies():
         else:
             print(("{} not found in your $PATH!".format(e)))
             everything_is_awesome = False
-            
+
     for p in python_packages:
         try:
             i = importlib.import_module(p)
@@ -119,7 +119,7 @@ def check_dependencies():
 def blastx(readfiles,baitfile,evalue,basename,cpu=None,max_target_seqs=10,unpaired=False):
     dna = set("ATCGN")
     if os.path.isfile(baitfile):
-        #Quick detection of whether baitfile is DNA. 
+        #Quick detection of whether baitfile is DNA.
         with open(baitfile) as bf:
             header = bf.readline()
             seqline = bf.readline().rstrip().upper()
@@ -146,7 +146,7 @@ def blastx(readfiles,baitfile,evalue,basename,cpu=None,max_target_seqs=10,unpair
     #Remove previous blast results if they exist (because we will be appending)
     if os.path.isfile(basename+".blastx"):
         os.remove(basename+".blastx")
-    
+
     if unpaired:
         read_file = readfiles
         pipe_cmd = "cat {} |  awk '{{if(NR % 4 == 1 || NR % 4 == 2) {{sub(/@/, \">\"); print; }} }}'".format(read_file)
@@ -159,17 +159,17 @@ def blastx(readfiles,baitfile,evalue,basename,cpu=None,max_target_seqs=10,unpair
         exitcode = subprocess.call(full_command,shell=True)
         if exitcode:
             #Concatenate the two blastfiles.
-        
+
             return None
         return basename + "_unpaired.blastx"
-        
+
     else:
         for read_file in readfiles:
 
-        #Piping commands for Fastq -> FASTA    
+        #Piping commands for Fastq -> FASTA
         # Curly braces must be doubled within a formatted string.
             pipe_cmd = "cat {} |  awk '{{if(NR % 4 == 1 || NR % 4 == 2) {{sub(/@/, \">\"); print; }} }}'".format(read_file)
-    
+
             blastx_command = "blastx -db {} -query - -evalue {} -outfmt 6 -max_target_seqs {}".format(db_file,evalue,max_target_seqs)
             if cpu:
                 full_command = "time {} | parallel -j {} -k --block 200K --recstart '>' --pipe '{}' >> {}.blastx ".format(pipe_cmd,cpu,blastx_command,basename)
@@ -179,9 +179,9 @@ def blastx(readfiles,baitfile,evalue,basename,cpu=None,max_target_seqs=10,unpair
             exitcode = subprocess.call(full_command,shell=True)
             if exitcode:
                 #Concatenate the two blastfiles.
-        
+
                 return None
-            
+
     return basename + '.blastx'
 
 def distribute(blastx_outputfile,readfiles,baitfile,run_dir,target=None,unpaired_readfile=None,exclude=None):
@@ -215,13 +215,13 @@ def distribute_bwa(bamfile,readfiles,baitfile,run_dir,target=None,unpaired=None,
     read_cmd = "time python {} {} {}".format(os.path.join(run_dir,"distribute_reads_to_targets_bwa.py"),bamfile," ".join(readfiles))
     print(("[CMD] {}\n".format(read_cmd)))
     exitcode = subprocess.call(read_cmd,shell=True)
-    
+
     if unpaired:
         up_bamfile = bamfile.replace(".bam","_unpaired.bam")
         unpaired_cmd = "time python {} {} {}".format(os.path.join(run_dir,"distribute_reads_to_targets_bwa.py"),up_bamfile,unpaired)
         print(("[CMD] {}\n".format(unpaired_cmd)))
         exitcode = subprocess.call(unpaired_cmd,shell=True)
-    
+
     if exitcode:
         print("ERROR: Something went wrong with distributing reads to gene directories.")
         return exitcode
@@ -245,7 +245,7 @@ def distribute_bwa(bamfile,readfiles,baitfile,run_dir,target=None,unpaired=None,
 def make_basename(readfiles,prefix=None):
     """Unless prefix is set, generate a directory based off the readfiles, using everything up to the first underscore.
         If prefix is set, generate the directory "prefix" and set basename to be the last component of the path.
-        
+
         """
     if prefix:
             if not os.path.exists(prefix):
@@ -266,7 +266,7 @@ def make_basename(readfiles,prefix=None):
 
             return prefixParentDir,prefix
 
-        ## --prefix is not set on cmd line;  Write output to subdir in . 
+        ## --prefix is not set on cmd line;  Write output to subdir in .
     basename = os.path.split(readfiles[0])[1].split('_')[0]
 
     if not os.path.exists(basename):
@@ -275,12 +275,12 @@ def make_basename(readfiles,prefix=None):
 
 def spades(genes,run_dir,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=None,unpaired=False):
     "Run SPAdes on each gene separately using GNU paralell."""
-    
+
 #    import spades_runner
 
     with open(spades_genefilename,'w') as spadesfile:
         spadesfile.write("\n".join(genes)+"\n")
-    
+
     if os.path.isfile("spades.log"):
         os.remove("spades.log")
     if os.path.isfile("spades_redo.log"):
@@ -300,9 +300,9 @@ def spades(genes,run_dir,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=No
     if kvals:
         spades_runner_list.append("--kvals")
         spades_runner_list.append("{}".format(",".join(kvals)))
-    
-    
-    spades_runner_cmd = " ".join(spades_runner_list)    
+
+
+    spades_runner_cmd = " ".join(spades_runner_list)
 
 #     if cpu:
 #         if paired:
@@ -326,44 +326,44 @@ def spades(genes,run_dir,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=No
 
 
 
-# 
+#
 #     spades_failed = spades_runner.spades_initial(spades_genefilename,cov_cutoff,cpu,kvals)
 #     if len(spades_failed) > 0:
 #         with open("failed_spades.txt",'w') as failed_spadefile:
 #             failed_spadefile.write("\n".join(spades_failed))
-#     
+#
 #         spades_failed_redos,spades_duds = spades_runner.rerun_spades("failed_spades.txt")
 #         if len(spades_failed) == 0:
 #             sys.stderr.write("All redos completed successfully!\n")
-#     
+#
     spades_genelist = []
     for gene in genes:
 #        if gene not in set(spades_failed):
         if gene not in set(spades_duds):
 #                if gene not in set(spades_failed_redos):
             spades_genelist.append(gene)
-    
+
     with open(exonerate_genefilename,'w') as genefile:
         genefile.write("\n".join(spades_genelist)+"\n")
 
-    return spades_genelist    
+    return spades_genelist
 
 # def spades(genes,cov_cutoff=8,cpu=None,paired=True,kvals=None):
 #     "Run SPAdes on each gene separately using GNU paralell."""
 #     if os.path.isfile("spades.log"):
 #         os.remove("spades.log")
-#     
+#
 #     with open(spades_genefilename,'w') as spadesfile:
 #         spadesfile.write("\n".join(genes)+"\n")
-#     
+#
 #     if paired:
 #         fileflag = "--12"
 #     else:
 #         fileflag = "-s"
-#     
+#
 #     if kvals:
 #         kvals = ",".join(kvals)
-#     
+#
 #     if cpu:
 #         if kvals:
 #             spades_cmd = "time parallel -j {} --eta spades.py --only-assembler -k {} --threads 1 --cov-cutoff {} {} {{}}/{{}}_interleaved.fasta -o {{}}/{{}}_spades :::: {} > spades.log".format(cpu,kvals,cov_cutoff,fileflag,spades_genefilename)
@@ -374,30 +374,30 @@ def spades(genes,run_dir,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=No
 #             spades_cmd = "time parallel --eta spades.py --only-assembler -k {} --threads 1 --cov-cutoff {} {} {{}}/{{}}_interleaved.fasta -o {{}}/{{}}_spades :::: {} > spades.log".format(kvals,cov_cutoff,fileflag,spades_genefilename)
 #         else:
 #             spades_cmd = "time parallel --eta spades.py --only-assembler --threads 1 --cov-cutoff {} {} {{}}/{{}}_interleaved.fasta -o {{}}/{{}}_spades :::: {} > spades.log".format(cov_cutoff,fileflag,spades_genefilename)
-#         
+#
 #     sys.stderr.write("Running SPAdes on {} genes\n".format(len(genes)))
 #     sys.stderr.write(spades_cmd + "\n")
 #     exitcode = subprocess.call(spades_cmd,shell=True)
-#     
-#     #Need to handle an error differently with SPAdes, which can fail if there are simply not enough reads. 
-#     
+#
+#     #Need to handle an error differently with SPAdes, which can fail if there are simply not enough reads.
+#
 #     if exitcode:
 #         sys.stderr.write("ERROR: One or more genes had an error with SPAdes assembly. This may be due to low coverage. No contigs found for the following genes:\n")
-#     
+#
 #     spades_genelist = []
-#     
+#
 #     for gene in genes:
 #         if os.path.isfile("{}/{}_spades/contigs.fasta".format(gene,gene)):
 #             shutil.copy("{}/{}_spades/contigs.fasta".format(gene,gene),"{}/{}_contigs.fasta".format(gene,gene))
 #             spades_genelist.append(gene)
 #         else:
 #             sys.stderr.write("{}\n".format(gene))
-#     
+#
 #     with open(exonerate_genefilename,'w') as genefile:
 #         genefile.write("\n".join(spades_genelist)+"\n")
-# 
-#     return spades_genelist    
-        
+#
+#     return spades_genelist
+
 
 def velvet(genes,cov_cutoff=5,ins_length=200,kvals = ["21","31","41","51","61"],cpu=None,paired=True):
     """Use parallel to run velveth and velvetg on a set of k values on every gene with blastx hits from the previous steps."""
@@ -405,11 +405,11 @@ def velvet(genes,cov_cutoff=5,ins_length=200,kvals = ["21","31","41","51","61"],
         os.remove('velveth.log')
     if os.path.isfile('velvetg.log'):
         os.remove('velvetg.log')
-    
+
     #Write a file with the list of genes for velvet, to avoid screen spam and hitting the argument cap.
     with open(velvet_genefilename,'w') as genefile:
         genefile.write("\n".join(genes)+"\n")
-    
+
     if paired:
         if cpu:
             velveth_cmd = "time parallel  -j {} --eta velveth {{1}}/velvet{{2}} {{2}} -shortPaired {{1}}/{{1}}_interleaved.fasta '>>' velveth.log :::: {} ::: {}".format(cpu,velvet_genefilename," ".join(kvals))
@@ -420,12 +420,12 @@ def velvet(genes,cov_cutoff=5,ins_length=200,kvals = ["21","31","41","51","61"],
             velveth_cmd = "time parallel  -j {} --eta velveth {{1}}/velvet{{2}} {{2}} -short {{1}}/{{1}}_interleaved.fasta '>>' velveth.log :::: {} ::: {}".format(cpu,velvet_genefilename," ".join(kvals))
         else:
             velveth_cmd = "time parallel  --eta velveth {{1}}/velvet{{2}} {{2}} -short {{1}}/{{1}}_interleaved.fasta '>>' velveth.log :::: {} ::: {}".format(velvet_genefilename," ".join(kvals))
-    
+
 
     #print os.getcwd()
     #print os.listdir(".")
-    
-    
+
+
     print(("Running velveth on {} genes".format(len(genes))))
     print(velveth_cmd)
     exitcode = subprocess.call(velveth_cmd,shell=True)
@@ -443,12 +443,12 @@ def velvet(genes,cov_cutoff=5,ins_length=200,kvals = ["21","31","41","51","61"],
         print("ERROR: Something went wrong with velvetg!")
         return exitcode
     with open(exonerate_genefilename,'w') as genefile:
-        genefile.write("\n".join([x for x in genes if os.path.getsize(os.path.join(x,'velvet_contigs.fa')) > 0]))    
+        genefile.write("\n".join([x for x in genes if os.path.getsize(os.path.join(x,'velvet_contigs.fa')) > 0]))
     return None
-    
+
 def cap3(genes,cpu=None):
     print("Concatenating velvet output")
-    
+
     if cpu:
         cat_cmd = "time parallel -j {} cat {{1}}/*/contigs.fa '>' {{1}}/velvet_contigs.fa :::: {}".format(cpu,velvet_genefilename)
     else:
@@ -460,14 +460,14 @@ def cap3(genes,cpu=None):
         return exitcode
     #Check that the velvet output actually has data in it.
     genes = [x for x in genes if os.path.getsize(os.path.join(x,'velvet_contigs.fa')) > 0]
-    
+
     with open(cap3_genefilename,'w') as genefile:
         genefile.write("\n".join(genes)+"\n")
-    
+
     if len(genes) == 0:
         print("No genes left! Exiting!")
         return 1
-        
+
     print(("Running Cap3 on {} genes".format(len(genes))))
     if cpu:
         cap3_cmd = "time parallel -j {} --eta cap3 {{1}}/velvet_contigs.fa -o 20 -p 99 '>' {{1}}/{{1}}_cap3.log :::: {}".format(cpu,cap3_genefilename)
@@ -486,14 +486,14 @@ def cap3(genes,cpu=None):
     if exitcode:
         print("ERROR: Something went wrong joining the CAP3 output files!")
         return exitcode
-        
-    return None    
+
+    return None
 
 def exonerate(genes,basename,run_dir,replace=True,cpu=None,thresh=55,use_velvet=False,depth_multiplier=0,length_pct=100,timeout=None):
     #Check that each gene in genes actually has CAP3 output
     #cap3_sizes = [os.stat(os.path.join(x,x+"_cap3ed.fa")).st_size for x in genes]
     #print cap3_sizes
-    
+
     if replace:
         for g in genes:
             if os.path.isdir(os.path.join(g,basename)):
@@ -502,35 +502,35 @@ def exonerate(genes,basename,run_dir,replace=True,cpu=None,thresh=55,use_velvet=
     if len(genes) == 0:
         print(("ERROR: No genes recovered for {}!".format(basename)))
         return 1
-    
+
     if os.path.isfile("genes_with_seqs.txt"):
         os.remove("genes_with_seqs.txt")
-    
+
     if use_velvet:
         file_stem = "cap3ed.fa"
     else:
         file_stem = "contigs.fasta"
-    
+
     print(("Running Exonerate to generate sequences for {} genes".format(len(genes))))
-    
+
     parallel_cmd_list = ["time parallel","--eta"]
     if cpu:
         parallel_cmd_list.append("-j {}".format(cpu))
     if timeout:
-        parallel_cmd_list.append("--timeout {}%".format(timeout))    
-    
+        parallel_cmd_list.append("--timeout {}%".format(timeout))
+
     exonerate_cmd_list = ["python","{}/exonerate_hits.py".format(run_dir),
                 "{}/{}_baits.fasta","{{}}/{{}}_{}".format(file_stem),
-                "--prefix {{}}/{}".format(basename), 
+                "--prefix {{}}/{}".format(basename),
                 "-t {}".format(thresh),
                 "--depth_multiplier {}".format(depth_multiplier),
                 "--length_pct {}".format(length_pct),
                 "::::",
                 exonerate_genefilename,
                 "> genes_with_seqs.txt"]
-                
-    exonerate_cmd = " ".join(parallel_cmd_list) + " " + " ".join(exonerate_cmd_list)            
-    
+
+    exonerate_cmd = " ".join(parallel_cmd_list) + " " + " ".join(exonerate_cmd_list)
+
 #     if cpu:
 #         exonerate_cmd = "time parallel -j {} python {} {{}}/{{}}_baits.fasta {{}}/{{}}_{} --prefix {{}}/{} -t {} --depth_multiplier {} --length_pct {} :::: {} > genes_with_seqs.txt".format(cpu,os.path.join(run_dir,"exonerate_hits.py"),file_stem,basename,thresh,depth_multiplier,length_pct,exonerate_genefilename)
 #     else:
@@ -547,14 +547,14 @@ def bwa(readfiles,baitfile,basename,cpu,unpaired=None):
     Returns an error if the second line of the baitfile contains characters other than ACTGN"""
     dna = set("ATCGN")
     if os.path.isfile(baitfile):
-        #Quick detection of whether baitfile is DNA. 
+        #Quick detection of whether baitfile is DNA.
         with open(baitfile) as bf:
             header = bf.readline()
             seqline = bf.readline().rstrip().upper()
             if set(seqline) - dna:
                 print("ERROR: characters other than ACTGN found in first line. You need a nucleotide bait file for BWA!")
                 return None
-    
+
         if os.path.isfile(os.path.split(baitfile)[0]+'.amb'):
             db_file = baitfile
         else:
@@ -572,16 +572,16 @@ def bwa(readfiles,baitfile,basename,cpu,unpaired=None):
     else:
         print(("ERROR: Cannot find baitfile at: {}".format(baitfile)))
         return None
-    
+
     if not cpu:
         import multiprocessing
         cpu = multiprocessing.cpu_count()
-    
+
     if len(readfiles) < 3:
         bwa_fastq = " ".join(readfiles)
     else:
         bwa_fastq = readfiles
-            
+
     bwa_commands = ["time bwa mem","-t",str(cpu),db_file,bwa_fastq," | samtools view -h -b -S - > "]
     if unpaired:
         bwa_commands.append(basename+"_unpaired.bam")
@@ -592,11 +592,11 @@ def bwa(readfiles,baitfile,basename,cpu,unpaired=None):
     exitcode = subprocess.call(full_command,shell=True)
     if exitcode:
         return None
-            
+
     return basename + '.bam'
 
 
-            
+
 def main():
     parser = argparse.ArgumentParser(description=helptext,formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--check-depend",dest='check_depend',help="Check for dependencies (executables and Python packages) and exit. May not work at all on Windows.",action='store_true')
@@ -608,10 +608,10 @@ def main():
     parser.add_argument("--no-exonerate",dest="exonerate",action="store_false",help="Do not run the Exonerate step, which assembles full length CDS regions and proteins from each gene")
     parser.add_argument("--velvet-mode",dest="use_velvet",action="store_true",help="Backwards compatability for velvet mode. NOT RECOMMENDED, VELVET MAKES ERROR PRONE ASSEMBLIES!")
     parser.add_argument("--no-assemble",dest="assemble",action="store_false",help="Skip the SPAdes assembly stage.")
-    
+
     parser.add_argument('-r',"--readfiles",nargs='+',help="One or more read files to start the pipeline. If exactly two are specified, will assume it is paired Illumina reads.",default=[])
     parser.add_argument('-b','--baitfile',help="FASTA file containing bait sequences for each gene. If there are multiple baits for a gene, the id must be of the form: >Taxon-geneName",default=None)
-    
+
     parser.add_argument('--cpu',type=int,default=0,help="Limit the number of CPUs. Default is to use all cores available.")
     parser.add_argument('--evalue',type=float,default=1e-10,help="e-value threshold for blastx hits, default: %(default)s")
     parser.add_argument('--max_target_seqs',type=int,default=10,help='Max target seqs to save in blast search, default: %(default)s')
@@ -624,7 +624,7 @@ def main():
 
     parser.add_argument('--prefix',help="Directory name for pipeline output, default is to use the FASTQ file name.",default=None)
     parser.add_argument("--timeout",help="Use GNU Parallel to kill long-running processes if they take longer than X percent of average.",default=0)
-    
+
     parser.add_argument("--target",help="Use this target to align sequences for each gene. Other targets for that gene will be used only for read sorting. Can be a tab-delimited file (one gene per line) or a single sequence name",default=None)
     parser.add_argument("--unpaired",help="Include a single FASTQ file with unpaired reads along with the two paired read files",default=False)
     parser.add_argument("--exclude",help="Do not use any sequence with the specified string as a target sequence for exonerate. The sequence will be used for read sorting.",default=None)
@@ -633,10 +633,10 @@ def main():
         parser.print_help()
         sys.exit(1)
     args = parser.parse_args()
-    
+
     run_dir = os.path.realpath(os.path.split(sys.argv[0])[0])
     print(("HybPiper was called with these arguments:\n{}\n".format(" ".join(sys.argv))))
-    
+
     #Check dependencies
     if args.check_depend:
         if check_dependencies():
@@ -658,7 +658,7 @@ def main():
     else:
         parser.print_help()
         return
-    readfiles = [os.path.abspath(x) for x in args.readfiles]    
+    readfiles = [os.path.abspath(x) for x in args.readfiles]
     if args.unpaired:
         unpaired_readfile = os.path.abspath(args.unpaired)
     else:
@@ -669,11 +669,11 @@ def main():
     if not args.baitfile:
         print("ERROR: Please specify a FASTA file containing target sequences.")
         return
-    
+
     #Generate directory
     basedir, basename = make_basename(args.readfiles,prefix=args.prefix)
     os.chdir(os.path.join(basedir,basename))
-    
+
     #BWA
     if args.bwa:
         if args.blast:
@@ -686,7 +686,7 @@ def main():
                 return
         else:
             bamfile = basename + ".bam"
-    
+
     #BLAST
     if args.blast:
         if args.unpaired:
@@ -698,7 +698,7 @@ def main():
     else:
         blastx_outputfile = basename+".blastx"
     #Distribute
-    
+
     if args.distribute:
         pre_existing_fastas = glob.glob("./*/*_interleaved.fasta") + glob.glob("./*/*_unpaired.fasta")
         for fn in pre_existing_fastas:
@@ -710,7 +710,7 @@ def main():
         if exitcode:
             sys.exit(1)
     if len(readfiles) == 2:
-    
+
         genes = [x for x in os.listdir(".") if os.path.isfile(os.path.join(x,x+"_interleaved.fasta"))]
     else:
         genes = [x for x in os.listdir(".") if os.path.isfile(os.path.join(x,x+"_unpaired.fasta"))]
@@ -720,14 +720,14 @@ def main():
     if len(genes) == 0:
         print("ERROR: No genes with BLAST hits! Exiting!")
         return
-    
+
     if args.use_velvet:
         #Velvet
         if args.velvet:
             exitcode = velvet(genes,cov_cutoff=args.cov_cutoff,ins_length=args.ins_length,kvals=args.kvals,cpu=args.cpu)
             if exitcode:
                 return
-            
+
         #CAP3
         if args.cap3:
             exitcode = cap3(genes,cpu=args.cpu)
@@ -735,7 +735,7 @@ def main():
                 return
 
     if args.assemble:
-        if len(readfiles) == 1:    
+        if len(readfiles) == 1:
             spades_genelist = spades(genes,run_dir,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,paired=False,timeout=args.timeout)
         elif len(readfiles) == 2:
             if unpaired_readfile:
@@ -749,16 +749,16 @@ def main():
         if not spades_genelist:
             print("ERROR: No genes had assembled contigs! Exiting!")
             return
-    
+
     #Exonerate hits
     if args.exonerate:
         genes = [x.rstrip() for x in open(exonerate_genefilename).readlines()]
         exitcode = exonerate(genes,basename,run_dir,cpu=args.cpu,thresh=args.thresh,length_pct = args.length_pct,depth_multiplier=args.depth_multiplier,timeout=args.timeout)
         if exitcode:
             return
-    
+
     sys.stderr.write("Generated sequences from {} genes!\n".format(len(open("genes_with_seqs.txt").readlines())))
-    
+
     paralog_warnings = [x for x in os.listdir(".") if os.path.isfile(os.path.join(x,basename,"paralog_warning.txt"))]
     with open("genes_with_paralog_warnings.txt",'w') as pw:
         pw.write("\n".join(paralog_warnings))
