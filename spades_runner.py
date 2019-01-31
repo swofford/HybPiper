@@ -60,7 +60,6 @@ def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout
     if exitcode:
         sys.stderr.write("ERROR: One or more genes had an error with SPAdes assembly. This may be due to low coverage. No contigs found for the following genes:\n")
 
-    spades_successful = []
     spades_failed = []
 
     for gene in genes:
@@ -69,7 +68,6 @@ def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout
             contig_file_size = os.stat("{}/{}_spades/contigs.fasta".format(gene,gene)).st_size
             if  contig_file_size> 0:
                 shutil.copy("{}/{}_spades/contigs.fasta".format(gene,gene),"{}/{}_contigs.fasta".format(gene,gene))
-                spades_successful.append(gene)
             else:
                 gene_failed = True
         else:
@@ -85,7 +83,6 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
 
     redo_cmds_file = open("redo_spades_commands.txt",'w')
 
-    spades_successful = []
     spades_failed = []
     spades_duds = []
 
@@ -129,7 +126,6 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
         if os.path.isfile("{}/{}_spades/contigs.fasta".format(gene,gene)):
             if os.stat("{}/{}_spades/contigs.fasta".format(gene,gene)).st_size > 0:
                 shutil.copy("{}/{}_spades/contigs.fasta".format(gene,gene),"{}/{}_contigs.fasta".format(gene,gene))
-                spades_successful.append(gene)
             else:
                 gene_failed = True
         else:
