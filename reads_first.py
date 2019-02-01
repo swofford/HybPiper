@@ -273,7 +273,7 @@ def make_basename(readfiles,prefix=None):
     return '.', basename
 
 
-def spades(genes,run_dir,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=None,unpaired=False):
+def spades(genes,run_dir,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=None,unpaired=False,suppress_rerun=False,rerun_only=False):
     "Run SPAdes on each gene separately using GNU parallel."""
 
     with open(spades_genefilename,'w') as spadesfile:
@@ -298,12 +298,15 @@ def spades(genes,run_dir,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=No
     if kvals:
         spades_runner_list.append("--kvals")
         spades_runner_list.append("{}".format(",".join(kvals)))
-
+    if suppress_rerun:
+        spades_runner_list.append("--suppress_rerun")
+    if rerun_only:
+        spades_runner_list.append("--redos_only")
 
     spades_runner_cmd = " ".join(spades_runner_list)
     exitcode = subprocess.call(spades_runner_cmd,shell=True)
     if exitcode:
-        sys.stderr.write("WARNING: Something went wrong with the assemblies! Check for failed assemblies and re-run! \n")
+        sys.stderr.write("WARNING: Something went wrong with the assemblies! Check for failed assemblies and re-run!\n")
         return None
     else:
         if os.path.isfile("spades_duds.txt"):
@@ -426,9 +429,6 @@ def exonerate(genes,basename,run_dir,replace=True,cpu=None,thresh=55,use_velvet=
         print(("ERROR: No genes recovered for {}!".format(basename)))
         return 1
 
-    if os.path.isfile("genes_with_seqs.txt"):
-        os.remove("genes_with_seqs.txt")
-
     if use_velvet:
         file_stem = "cap3ed.fa"
     else:
@@ -442,6 +442,9 @@ def exonerate(genes,basename,run_dir,replace=True,cpu=None,thresh=55,use_velvet=
     if timeout:
         parallel_cmd_list.append("--timeout {}%".format(timeout))
 
+#   Build Exonerate command.  Not that we now append to 'genes_with_seqs.txt' rather than overwrite
+#   it in order to support the 'force_exonerate_hit' option.  Therefore, this file must be removed
+#   at the start of each new analysis.
     exonerate_cmd_list = ["python","{}/exonerate_hits.py".format(run_dir),
                 "{}/{}_baits.fasta","{{}}/{{}}_{}".format(file_stem),
                 "--prefix {{}}/{}".format(basename),
@@ -450,7 +453,7 @@ def exonerate(genes,basename,run_dir,replace=True,cpu=None,thresh=55,use_velvet=
                 "--length_pct {}".format(length_pct),
                 "::::",
                 exonerate_genefilename,
-                "> genes_with_seqs.txt"]
+                ">> genes_with_seqs.txt"]
 
     exonerate_cmd = " ".join(parallel_cmd_list) + " " + " ".join(exonerate_cmd_list)
 
@@ -525,6 +528,7 @@ def main():
     parser.add_argument("--no-velvet",dest="velvet",action="store_false",help="Do not run the velvet stages (velveth and velvetg)")
     parser.add_argument("--no-cap3",dest="cap3",action="store_false",help="Do not run CAP3, which joins the output of the different velvet runs")
     parser.add_argument("--no-exonerate",dest="exonerate",action="store_false",help="Do not run the Exonerate step, which assembles full length CDS regions and proteins from each gene")
+    parser.add_argument("--force_exonerate_hit",dest="force_exonerate_hit",action="store_true",help="Iterate SPAdes assembly if necessary, reducing largest k-mer value until Exonerate finds a hit to the target sequence")
     parser.add_argument("--velvet-mode",dest="use_velvet",action="store_true",help="Backwards compatability for velvet mode. NOT RECOMMENDED, VELVET MAKES ERROR PRONE ASSEMBLIES!")
     parser.add_argument("--no-assemble",dest="assemble",action="store_false",help="Skip the SPAdes assembly stage.")
 
@@ -641,32 +645,77 @@ def main():
         print("ERROR: No genes with BLAST hits! Exiting!")
         return
 
-    if args.use_velvet:
-        #Velvet
-        if args.velvet:
-            exitcode = velvet(genes,cov_cutoff=args.cov_cutoff,ins_length=args.ins_length,kvals=args.kvals,cpu=args.cpu)
+#   Start fresh, removing any files left over from earlier runs.
+    if os.path.isfile("genes_with_seqs.txt"):
+        os.remove("genes_with_seqs.txt")
+    if os.path.isfile("spades_duds.txt"):
+        os.remove("spades_duds.txt")
+
+    if args.assemble and args.exonerate and args.force_exonerate_hit:
+#
+#       Mode added by Dave Swofford to combine assembly and Exonerate steps, reducing k-mer length
+#       until Exonerate hits are obtained for all genes.
+#
+        is_first_pass = True
+        done = False
+        while not done:
+            genelist = spades(genes,run_dir,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,
+                              timeout=args.timeout,paired=using_paired_reads,
+                              unpaired=have_unpaired_readfile,
+                              suppress_rerun=True,
+                              rerun_only=not is_first_pass)
+            if not genelist:
+                print("ERROR: No genes had assembled contigs! Exiting!")
+                return
+
+            genes = [x.rstrip() for x in open(exonerate_genefilename).readlines()]
+            full_gene_set = set(genes)
+            exitcode = exonerate(genes,basename,run_dir,cpu=args.cpu,thresh=args.thresh,
+                                 length_pct=args.length_pct,depth_multiplier=args.depth_multiplier,
+                                 timeout=args.timeout)
             if exitcode:
                 return
 
-        #CAP3
-        if args.cap3:
-            exitcode = cap3(genes,cpu=args.cpu)
+            genes_with_seqs_list = [line.split()[0] for line in open('genes_with_seqs.txt')]
+            genes_with_seqs = set(genes_with_seqs_list)
+            exonerate_failed = full_gene_set.difference(genes_with_seqs)
+            if exonerate_failed:
+                is_first_pass = False
+                with open("failed_spades.txt",'w') as failed_spadefile:
+                    failed_spadefile.write("\n".join(exonerate_failed))
+            else:
+                done = True
+    else:
+#
+#       This is the original version of the assembly/Exonerate steps.
+#
+        if args.use_velvet:
+            #Velvet
+            if args.velvet:
+                exitcode = velvet(genes,cov_cutoff=args.cov_cutoff,ins_length=args.ins_length,kvals=args.kvals,cpu=args.cpu)
+                if exitcode:
+                    return
+
+            #CAP3
+            if args.cap3:
+                exitcode = cap3(genes,cpu=args.cpu)
+                if exitcode:
+                    return
+
+        if args.assemble:
+            spades_genelist = spades(genes,run_dir,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,timeout=args.timeout,paired=using_paired_reads,unpaired=have_unpaired_readfile)
+            if not spades_genelist:
+                print("ERROR: No genes had assembled contigs! Exiting!")
+                return
+
+        #Exonerate hits
+        if args.exonerate:
+            genes = [x.rstrip() for x in open(exonerate_genefilename).readlines()]
+            exitcode = exonerate(genes,basename,run_dir,cpu=args.cpu,thresh=args.thresh,length_pct = args.length_pct,depth_multiplier=args.depth_multiplier,timeout=args.timeout)
             if exitcode:
                 return
 
-    if args.assemble:
-        spades_genelist = spades(genes,run_dir,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,timeout=args.timeout,paired=using_paired_reads,unpaired=have_unpaired_readfile)
-        if not spades_genelist:
-            print("ERROR: No genes had assembled contigs! Exiting!")
-            return
-
-    #Exonerate hits
-    if args.exonerate:
-        genes = [x.rstrip() for x in open(exonerate_genefilename).readlines()]
-        exitcode = exonerate(genes,basename,run_dir,cpu=args.cpu,thresh=args.thresh,length_pct = args.length_pct,depth_multiplier=args.depth_multiplier,timeout=args.timeout)
-        if exitcode:
-            return
-
+    ### DLS: this is a slow way to get number of lines in file
     sys.stderr.write("Generated sequences from {} genes!\n".format(len(open("genes_with_seqs.txt").readlines())))
 
     paralog_warnings = [x for x in os.listdir(".") if os.path.isfile(os.path.join(x,basename,"paralog_warning.txt"))]

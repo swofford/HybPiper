@@ -35,7 +35,7 @@ def make_spades_cmd(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,redo=F
 
 
 def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=None,unpaired=False):
-    "Run SPAdes on each gene separately using GNU paralell."""
+    "Run SPAdes on each gene separately using GNU parallel."""
     if os.path.isfile("spades.log"):
         os.remove("spades.log")
 
@@ -92,6 +92,12 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
             genes_redos.append(gene)
         redo_kmers = [str(x) for x in all_kmers[:-1]]
         restart_k = "k{}".format(redo_kmers[-1])
+
+#       Remove data for longest k-mer so that restart will start from shorter maximum k-mer length:
+        last = max(all_kmers)
+        dir_to_remove = os.path.join(gene,"{}_spades".format(gene), "K"+str(last))
+        shutil.rmtree(dir_to_remove)
+
         kvals = ",".join(redo_kmers)
         spades_cmd = "spades.py --restart-from {} -k {} --cov-cutoff {} -o {}/{}_spades".format(restart_k,kvals,cov_cutoff,gene,gene)
         redo_cmds_file.write(spades_cmd + "\n")
@@ -138,12 +144,10 @@ def main():
     parser.add_argument("--single",help="Reads are single end. Default is paired end.",action='store_true',default=False)
     parser.add_argument("--timeout",help="Use GNU Parallel to kill processes that take longer than X times the average.",default=0)
     parser.add_argument("--unpaired",help="For assembly with both paired (interleaved) and unpaired reads",action="store_true",default=False)
+    parser.add_argument("--suppress_rerun",help="Don't rerun spades with reduced k-mer set after failure",action="store_true",default=False)
     args = parser.parse_args()
 
-    if args.single:
-        is_paired = False
-    else:
-        is_paired = True
+    is_paired = not args.single
 
     if os.path.isfile("failed_spades.txt") and args.redos_only:
         spades_failed = rerun_spades("failed_spades.txt",cpu=args.cpu,paired=is_paired)
@@ -157,7 +161,7 @@ def main():
 
         spades_failed = spades_initial(args.genelist,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,paired=is_paired,timeout=args.timeout,unpaired=args.unpaired)
 
-        if len(spades_failed) > 0:
+        if not args.suppress_rerun and len(spades_failed) > 0:
             with open("failed_spades.txt",'w') as failed_spadefile:
                 failed_spadefile.write("\n".join(spades_failed))
 
