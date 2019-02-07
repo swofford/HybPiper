@@ -9,7 +9,7 @@ usage: python distribute_targets.py baitfile\n
 
 
 Given a file containing all of the "baits" for a target enrichment, create separate
-FASTA files with all copies of that bait. Multiple copies of the same bait can be 
+FASTA files with all copies of that bait. Multiple copies of the same bait can be
 specified using a "-" delimiter. For example, the following will be sorted in to the same
 file:
 
@@ -38,13 +38,13 @@ def mkdir_p(path):
 def tailored_target_blast(blastxfilename,exclude=None):
     """Determine, for each protein, the 'best' target protein, by tallying up the blastx hit scores."""
     blastxfile = open(blastxfilename)
-    
+
     hitcounts = {}
     for result in blastxfile:
         result = result.split()
         hitname = result[1].split("-")
         bitscore = float(result[-1])
-        try: 
+        try:
             protname = hitname[1]
         except IndexError:
             raise IndexError("Gene name not found! FASTA headers should be formatted like this:\n >SpeciesName-GeneName\n")
@@ -73,7 +73,7 @@ def tailored_target_blast(blastxfilename,exclude=None):
     for x in besthit_counts:
         tallyfile.write("{}\t{}\n".format(x, besthit_counts[x]))
     tallyfile.close()
-    return besthits        
+    return besthits
 
 def tailored_target_bwa(bamfilename,unpaired=False,exclude=None):
     """Determine, for each protein, the 'best' target protein, by tallying up the blastx hit scores."""
@@ -83,13 +83,13 @@ def tailored_target_bwa(bamfilename,unpaired=False,exclude=None):
     if unpaired:
         up_samtools_cmd = "samtools view -F 4 {}".format(bamfilename.replace(".bam","_unpaired.bam"))
         up_child = subprocess.Popen(up_samtools_cmd,shell=True,stdout=subprocess.PIPE,universal_newlines=True)
-        bwa_results += up_child.stdout.readlines()    
+        bwa_results += up_child.stdout.readlines()
     hitcounts = {}
     for result in bwa_results:
         result = result.split()
         hitname = result[2].split("-")
         mapscore = float(result[4])
-        try: 
+        try:
             protname = hitname[1]
         except IndexError:
             raise IndexError("Gene name not found! FASTA headers should be formatted like this:\n >SpeciesName-GeneName\n")
@@ -118,9 +118,9 @@ def tailored_target_bwa(bamfilename,unpaired=False,exclude=None):
     for x in besthit_counts:
         tallyfile.write("{}\t{}\n".format(x, besthit_counts[x]))
     tallyfile.close()
-    return besthits    
+    return besthits
 
-     
+
 def distribute_targets(baitfile,dirs,delim,besthits,translate=False,target=None):
     if target:
         if os.path.isfile(target):
@@ -128,8 +128,8 @@ def distribute_targets(baitfile,dirs,delim,besthits,translate=False,target=None)
             genes_to_targets = {x.split()[0]:x.rstrip().split()[1] for x in open(target)}
             target_is_file = True
         else:
-            target_is_file = False    
-        
+            target_is_file = False
+
     targets = SeqIO.parse(baitfile,'fasta')
     no_matches = []
     for prot in targets:
@@ -137,17 +137,17 @@ def distribute_targets(baitfile,dirs,delim,besthits,translate=False,target=None)
         prot_cat = prot.id.split(delim)[-1]
         if translate:
             prot.seq = prot.seq.translate()
-        
+
         if dirs:
             mkdir_p(prot_cat)
-        
+
         if prot_cat in besthits:
             if target:
                 if target_is_file:
                     besthit_taxon = genes_to_targets[prot_cat]
                 else:
                     besthit_taxon = target
-            else:       
+            else:
                 besthit_taxon = besthits[prot_cat]
             if prot.id.split("-")[0] == besthit_taxon:
                 #print "Protein {} is a best match to {}".format(prot_cat,besthit_taxon)
@@ -156,15 +156,15 @@ def distribute_targets(baitfile,dirs,delim,besthits,translate=False,target=None)
                 outfile.close()
         else:
             no_matches.append(prot_cat)
-    print("[DISTRIBUTE]: {} proteins had no good matches.".format(len(set(no_matches))))
-    #print besthits.values()            
+    print("\nNumber of proteins without good matches = {}".format(len(set(no_matches))))
+    #print besthits.values()
 
-        
+
 
 def help():
     print(helptext)
     return
-        
+
 def main():
     parser = argparse.ArgumentParser(description=helptext,formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("-d","--delimiter",help="Field separating FASTA ids for multiple sequences per target. Default is '-' . For no delimeter, write None", default="-")
@@ -175,15 +175,15 @@ def main():
     parser.add_argument("--unpaired",help="Indicate whether to expect a file containing results from unpaired reads.",action="store_true",default=False)
     parser.add_argument("--exclude",help="Do not use any sequence with the specified string as the chosen target.",default=None)
     args = parser.parse_args()
-    
+
     if args.blastx:
         besthits = tailored_target_blast(args.blastx,args.exclude)
-        translate = False            
+        translate = False
     if args.bam:
         translate = True
         besthits = tailored_target_bwa(args.bam,args.unpaired,args.exclude)
     distribute_targets(args.baitfile,dirs=True,delim=args.delimiter,besthits=besthits,translate=translate,target=args.target)
-    
+
 
 
 if __name__=="__main__":main()

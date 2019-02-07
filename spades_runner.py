@@ -34,14 +34,14 @@ def make_spades_cmd(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,redo=F
     return spades_cmd
 
 
-def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=None,unpaired=False):
+def spades_initial(genelist_file,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout=None,unpaired=False):
     "Run SPAdes on each gene separately using GNU parallel."""
     if os.path.isfile("spades.log"):
         os.remove("spades.log")
 
-    genes = [x.rstrip() for x in open(genelist)]
+    genes = [x.rstrip() for x in open(genelist_file)]
     #print paired
-    spades_cmd = make_spades_cmd(genelist,cov_cutoff,cpu,paired=paired,kvals=kvals,unpaired=unpaired)
+    spades_cmd = make_spades_cmd(genelist_file, cov_cutoff, cpu, paired=paired, kvals=kvals, unpaired=unpaired)
 
     sys.stderr.write("Running SPAdes on {} genes\n".format(len(genes)))
     sys.stderr.write(spades_cmd + "\n")
@@ -69,8 +69,8 @@ def spades_initial(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,timeout
     return spades_failed
 
 
-def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
-    genes = [x.rstrip() for x in open(genelist)]
+def rerun_spades(genelist_file,cov_cutoff=8,cpu=None, paired = True):
+    genes = [x.rstrip() for x in open(genelist_file)]
 
     redo_cmds_file = open("redo_spades_commands.txt",'w')
 
@@ -78,7 +78,7 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
     spades_duds = []
 
     genes_redos = []
-
+    force_stop = False ###TEMP
     restart_ks = []
     for gene in genes:
         all_kmers = [int(x[1:]) for x in os.listdir(os.path.join(gene,"{}_spades".format(gene))) if x.startswith("K")]
@@ -91,15 +91,19 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
         else:
             genes_redos.append(gene)
         redo_kmers = [str(x) for x in all_kmers[:-1]]
+        sys.stderr.write("#################### redo_kmers --> {}\n".format(redo_kmers))
         restart_k = "k{}".format(redo_kmers[-1])
 
 #       Remove data for longest k-mer so that restart will start from shorter maximum k-mer length:
         last = max(all_kmers)
         dir_to_remove = os.path.join(gene,"{}_spades".format(gene), "K"+str(last))
+        sys.stderr.write("#################### rerun_spades deleting dir {}\n".format(dir_to_remove))
         shutil.rmtree(dir_to_remove)
 
         kvals = ",".join(redo_kmers)
-        spades_cmd = "spades.py --restart-from {} -k {} --cov-cutoff {} -o {}/{}_spades".format(restart_k,kvals,cov_cutoff,gene,gene)
+        if len(redo_kmers) == 3:###TEMP
+            force_stop = True###TEMP
+        spades_cmd = "spades.py --restart-from {} -k {} --cov-cutoff {} -o {}/{}_spades".format(restart_k, kvals, cov_cutoff, gene, gene)
         redo_cmds_file.write(spades_cmd + "\n")
 
     redo_cmds_file.close()
@@ -108,64 +112,65 @@ def rerun_spades(genelist,cov_cutoff=8,cpu=None, paired = True):
     else:
         redo_spades_cmd = "parallel --eta --timeout 400% :::: redo_spades_commands.txt > spades_redo.log"
 
-
     sys.stderr.write("Re-running SPAdes for {} genes\n".format(len(genes_redos)))
     sys.stderr.write(redo_spades_cmd+"\n")
     exitcode = subprocess.call(redo_spades_cmd,shell=True)
+    sys.stderr.write("#################### redo_spades_cmd returned exitcode = {}\n".format(exitcode))
     if exitcode:
         sys.stderr.write("ERROR: One or more genes had an error with SPAdes assembly. This may be due to low coverage. No contigs found for the following genes:\n")
 
     for gene in genes_redos:
+        sys.stderr.write("#################### checking gene {} for success:\n".format(gene))
         gene_failed = False
-        if os.path.isfile("{}/{}_spades/contigs.fasta".format(gene,gene)):
-            if os.stat("{}/{}_spades/contigs.fasta".format(gene,gene)).st_size > 0:
-                shutil.copy("{}/{}_spades/contigs.fasta".format(gene,gene),"{}/{}_contigs.fasta".format(gene,gene))
+        if os.path.isfile("{}/{}_spades/contigs.fasta".format(gene, gene)):
+            gene_file = "{}/{}_spades/contigs.fasta".format(gene, gene)
+            sys.stderr.write("####################     file {} is present, size = {}:\n".format(gene_file, os.stat(gene_file).st_size))
+            if force_stop or os.stat("{}/{}_spades/contigs.fasta".format(gene, gene)).st_size > 0:
+                shutil.copy("{}/{}_spades/contigs.fasta".format(gene, gene),"{}/{}_contigs.fasta".format(gene, gene))
             else:
                 gene_failed = True
         else:
             gene_failed = True
 
         if gene_failed:
-            sys.stderr.write("{}\n".format(gene))
+            ### sys.stderr.write("{}\n".format(gene))
             spades_duds.append(gene)
     with open("spades_duds.txt",'w') as spades_duds_file:
         spades_duds_file.write("\n".join(spades_duds))
 
-    return spades_failed,spades_duds
+###    return spades_failed,spades_duds
+    return spades_duds,spades_duds ### ???
 
 
 def main():
     parser = argparse.ArgumentParser(description=helptext,formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('genelist',help="Text file containing the name of each gene to conduct SPAdes assembly. One gene per line, should correspond to directories within the current directory.")
-    parser.add_argument('--cpu',type=int,default=0,help="Limit the number of CPUs. Default is to use all cores available.")
-    parser.add_argument('--cov_cutoff',type=int,default=8,help="Coverage cutoff for SPAdes. default: %(default)s")
-    parser.add_argument("--kvals",nargs='+',help="Values of k for SPAdes assemblies. Default is to use SPAdes auto detection based on read lengths (recommended).",default=None)
-    parser.add_argument("--redos_only",action="store_true",default=False,help="Continue from previously assembled SPAdes assemblies and only conduct redos from failed_spades.txt")
-    parser.add_argument("--single",help="Reads are single end. Default is paired end.",action='store_true',default=False)
-    parser.add_argument("--timeout",help="Use GNU Parallel to kill processes that take longer than X times the average.",default=0)
-    parser.add_argument("--unpaired",help="For assembly with both paired (interleaved) and unpaired reads",action="store_true",default=False)
-    parser.add_argument("--suppress_rerun",help="Don't rerun spades with reduced k-mer set after failure",action="store_true",default=False)
+    parser.add_argument('genelist', help="Text file containing the name of each gene to conduct SPAdes assembly. One gene per line, should correspond to directories within the current directory.")### rename genefile?
+    parser.add_argument('--cpu', type=int, default=0, help="Limit the number of CPUs. Default is to use all cores available.")
+    parser.add_argument('--cov_cutoff', type=int, default=8, help="Coverage cutoff for SPAdes. default: %(default)s")
+    parser.add_argument("--kvals", nargs='+', help="Values of k for SPAdes assemblies. Default is to use SPAdes auto detection based on read lengths (recommended).", default=None)
+    parser.add_argument("--redos_only", action="store_true", default=False, help="Continue from previously assembled SPAdes assemblies and only conduct redos from failed_spades.txt")
+    parser.add_argument("--single", help="Reads are single end. Default is paired end.", action='store_true', default=False)
+    parser.add_argument("--timeout", help="Use GNU Parallel to kill processes that take longer than X times the average.", default=0)
+    parser.add_argument("--unpaired", help="For assembly with both paired (interleaved) and unpaired reads", action="store_true", default=False) ####
+    parser.add_argument("--suppress_rerun", help="Don't rerun spades with reduced k-mer set after failure", action="store_true", default=False)
     args = parser.parse_args()
 
     is_paired = not args.single
 
     if os.path.isfile("failed_spades.txt") and args.redos_only:
-        spades_failed = rerun_spades("failed_spades.txt",cpu=args.cpu,paired=is_paired)
+        spades_failed, spades_duds = rerun_spades("failed_spades.txt", cpu=args.cpu, paired=is_paired)
+        sys.stderr.write("#################### rerun_spades returned spades_failed = {}:\n".format(spades_failed))
+        if len(spades_failed) > 0:
+            with open("failed_spades.txt", 'w') as failed_spadefile:
+                failed_spadefile.write("\n".join(spades_failed))
     else:
-        if args.unpaired:       #Create empty unpaired file if it doesn't exist
-            for gene in open(args.genelist):
-                gene=gene.rstrip()
-                if os.path.isfile("{}/{}_interleaved.fasta".format(gene,gene)):
-                    if not os.path.isfile("{}/{}_unpaired.fasta".format(gene,gene)):
-                        open("{}/{}_unpaired.fasta".format(gene,gene),'a').close()
-
-        spades_failed = spades_initial(args.genelist,cov_cutoff=args.cov_cutoff,cpu=args.cpu,kvals=args.kvals,paired=is_paired,timeout=args.timeout,unpaired=args.unpaired)
+        spades_failed = spades_initial(args.genelist, cov_cutoff=args.cov_cutoff, cpu=args.cpu, kvals=args.kvals, paired=is_paired, timeout=args.timeout, unpaired=args.unpaired)
 
         if not args.suppress_rerun and len(spades_failed) > 0:
-            with open("failed_spades.txt",'w') as failed_spadefile:
+            with open("failed_spades.txt", 'w') as failed_spadefile:
                 failed_spadefile.write("\n".join(spades_failed))
 
-            spades_failed,spades_duds = rerun_spades("failed_spades.txt",cov_cutoff=args.cov_cutoff,paired=is_paired,cpu=args.cpu)
+            spades_failed, spades_duds = rerun_spades("failed_spades.txt", cov_cutoff=args.cov_cutoff, paired=is_paired, cpu=args.cpu)
             if len(spades_failed) == 0:
                 sys.stderr.write("All redos completed successfully!\n")
             else:
