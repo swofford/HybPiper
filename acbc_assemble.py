@@ -146,6 +146,21 @@ def have_all_dependencies(run_dir):
 
     return ok
 
+def make_set_from_genelist_file(filename):
+    """
+    Returns a set containing gene names contained in 'filename' (one gene per line).
+    """
+    return set([line.split()[0] for line in open(filename)])
+
+def my_delete_file(filename):
+    """
+    Deletes file 'filename' (ignoring errors if it doesn't exist)/
+    """
+    try:
+        os.remove(filename)
+    except OSError:
+        pass
+
 def blastx(readfiles, baitfile, evalue, basename, cpu=None, max_target_seqs=10):
     dna = set("ATCGN")
     if os.path.isfile(baitfile):
@@ -175,8 +190,7 @@ def blastx(readfiles, baitfile, evalue, basename, cpu=None, max_target_seqs=10):
         return None
 
 #   Remove previous blast results if they exist (because we will be appending)
-    if os.path.isfile(basename+".blastx"):
-        os.remove(basename+".blastx")
+    my_delete_file(basename+".blastx")
 
     for read_file in readfiles:
 
@@ -280,10 +294,8 @@ def spades(genes_to_assemble, run_dir, cov_cutoff=8, cpu=None, paired=True, kval
     with open(spades_genefilename,'w') as spadesfile:
         spadesfile.write("\n".join(genes_to_assemble)+"\n")
 
-    if os.path.isfile("spades.log"):
-        os.remove("spades.log")
-    if os.path.isfile("spades_redo.log"):
-        os.remove("spades_redo.log")
+    my_delete_file("spades.log")
+    my_delete_file("spades_redo.log")
 
     spades_runner_list = ["python","{}/spades_runner.py".format(run_dir),spades_genefilename,"--cov_cutoff",str(cov_cutoff)]
     if cpu:
@@ -557,14 +569,7 @@ def main():
                     return
 
             iter += 1
-            if 0:###
-                genes_with_seqs_list = [line.split()[0] for line in open('genes_with_seqs.txt')]
-            else:
-                genes_with_seqs_list = []
-                for line in open('genes_with_seqs.txt'):
-                    gene = line.split()[0]
-                    genes_with_seqs_list.append(gene)
-            genes_with_seqs = set(genes_with_seqs_list)
+            genes_with_seqs = make_set_from_genelist_file('genes_with_seqs.txt')
             print("\n\n#################### DLS: iter {} genes_with_seqs --> {}".format(iter, genes_with_seqs))
             print("                          full_gene_set --> {}\n".format(full_gene_set))
             exonerate_failed = full_gene_set.difference(genes_with_seqs)
