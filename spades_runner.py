@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
+from __future__ import print_function	# for python 2 vs 3 compatibility
+
+import acbc
 import argparse, os, sys, shutil, subprocess
-
-helptext='''Run the assembler SPAdes with re-dos if any of the k-mers are unsuccessful.
-The re-runs are attempted by removing the largest k-mer and re-running spades. If a final
-contigs.fasta file is generated, a 'spades.ok' file is saved.'''
-
+import logging
 
 def make_spades_cmd(genelist,cov_cutoff=8,cpu=None,paired=True,kvals=None,redo=False,timeout=None,unpaired=False):
 
@@ -48,7 +47,7 @@ def spades_initial(genelist_file,cov_cutoff=8,cpu=None,paired=True,kvals=None,ti
     exitcode = subprocess.call(spades_cmd,shell=True)
 
     if exitcode:
-        sys.stderr.write("ERROR: One or more genes had an error with SPAdes assembly. This may be due to low coverage. No contigs found for the following genes:\n")
+        sys.stderr.write("\nError: One or more genes had an error with SPAdes assembly. This may be due to low coverage. No contigs found for the following genes:\n")
 
     spades_failed = []
 
@@ -68,17 +67,17 @@ def spades_initial(genelist_file,cov_cutoff=8,cpu=None,paired=True,kvals=None,ti
             spades_failed.append(gene)
     return spades_failed
 
-
 def rerun_spades(genelist_file,cov_cutoff=8,cpu=None, paired = True):
     genes = [x.rstrip() for x in open(genelist_file)]
 
     redo_cmds_file = open("redo_spades_commands.txt",'w')
 
+#   The 'spades_failed' set contains genes for which a good assembly has (still) not been obtained for the current
+#   k-mer set.  The 'spades_duds' set contains genes for which the assembly failed for even the shortest k-mer.
     spades_failed = []
     spades_duds = []
 
     genes_redos = []
-    force_stop = False ###TEMP
     restart_ks = []
     for gene in genes:
         all_kmers = [int(x[1:]) for x in os.listdir(os.path.join(gene,"{}_spades".format(gene))) if x.startswith("K")]
@@ -91,18 +90,16 @@ def rerun_spades(genelist_file,cov_cutoff=8,cpu=None, paired = True):
         else:
             genes_redos.append(gene)
         redo_kmers = [str(x) for x in all_kmers[:-1]]
-        sys.stderr.write("#################### redo_kmers --> {}\n".format(redo_kmers))
+        logger.debug("redo_kmers --> {}\n".format(redo_kmers))
         restart_k = "k{}".format(redo_kmers[-1])
 
 #       Remove data for longest k-mer so that restart will start from shorter maximum k-mer length:
         last = max(all_kmers)
         dir_to_remove = os.path.join(gene,"{}_spades".format(gene), "K"+str(last))
-        sys.stderr.write("#################### rerun_spades deleting dir {}\n".format(dir_to_remove))
+        logger.debug("rerun_spades deleting dir {}\n".format(dir_to_remove))
         shutil.rmtree(dir_to_remove)
 
         kvals = ",".join(redo_kmers)
-        if len(redo_kmers) == 3:###TEMP
-            force_stop = True###TEMP
         spades_cmd = "spades.py --restart-from {} -k {} --cov-cutoff {} -o {}/{}_spades".format(restart_k, kvals, cov_cutoff, gene, gene)
         redo_cmds_file.write(spades_cmd + "\n")
 
@@ -115,17 +112,17 @@ def rerun_spades(genelist_file,cov_cutoff=8,cpu=None, paired = True):
     sys.stderr.write("Re-running SPAdes for {} genes\n".format(len(genes_redos)))
     sys.stderr.write(redo_spades_cmd+"\n")
     exitcode = subprocess.call(redo_spades_cmd,shell=True)
-    sys.stderr.write("#################### redo_spades_cmd returned exitcode = {}\n".format(exitcode))
+    logger.debug("redo_spades_cmd returned exitcode = {}".format(exitcode))
     if exitcode:
         sys.stderr.write("ERROR: One or more genes had an error with SPAdes assembly. This may be due to low coverage. No contigs found for the following genes:\n")
 
     for gene in genes_redos:
-        sys.stderr.write("#################### checking gene {} for success:\n".format(gene))
+        logger.debug("checking gene {} for success:\n".format(gene))
         gene_failed = False
         if os.path.isfile("{}/{}_spades/contigs.fasta".format(gene, gene)):
             gene_file = "{}/{}_spades/contigs.fasta".format(gene, gene)
-            sys.stderr.write("####################     file {} is present, size = {}:\n".format(gene_file, os.stat(gene_file).st_size))
-            if force_stop or os.stat("{}/{}_spades/contigs.fasta".format(gene, gene)).st_size > 0:
+            logger.debug("    file {} is present, size = {}:".format(gene_file, os.stat(gene_file).st_size))
+            if os.stat("{}/{}_spades/contigs.fasta".format(gene, gene)).st_size > 0:
                 shutil.copy("{}/{}_spades/contigs.fasta".format(gene, gene),"{}/{}_contigs.fasta".format(gene, gene))
             else:
                 gene_failed = True
@@ -133,17 +130,18 @@ def rerun_spades(genelist_file,cov_cutoff=8,cpu=None, paired = True):
             gene_failed = True
 
         if gene_failed:
-            ### sys.stderr.write("{}\n".format(gene))
-            spades_duds.append(gene)
-    with open("spades_duds.txt",'w') as spades_duds_file:
-        spades_duds_file.write("\n".join(spades_duds))
+            spades_failed.append(gene)
 
-###    return spades_failed,spades_duds
-    return spades_duds,spades_duds ### ???
-
+    acbc.delete_file("redo_spades_commands.txt")
+    return spades_failed, spades_duds
 
 def main():
+
+    helptext = """Runs the SPAdes assembler, optionally with re-dos if any of the k-mers are
+                  unsuccessful (these re-runs are attempted by removing the largest k-mer and
+                  re-running spades)."""
     parser = argparse.ArgumentParser(description=helptext,formatter_class=argparse.RawTextHelpFormatter)
+
     parser.add_argument('genelist', help="Text file containing the name of each gene to conduct SPAdes assembly. One gene per line, should correspond to directories within the current directory.")### rename genefile?
     parser.add_argument('--cpu', type=int, default=0, help="Limit the number of CPUs. Default is to use all cores available.")
     parser.add_argument('--cov_cutoff', type=int, default=8, help="Coverage cutoff for SPAdes. default: %(default)s")
@@ -155,25 +153,27 @@ def main():
     parser.add_argument("--suppress_rerun", help="Don't rerun spades with reduced k-mer set after failure", action="store_true", default=False)
     args = parser.parse_args()
 
+    global logger
+    logger = acbc.set_logger("spades_runner", debug=False)
+
     is_paired = not args.single
 
-    if os.path.isfile("failed_spades.txt") and args.redos_only:
-        spades_failed, spades_duds = rerun_spades("failed_spades.txt", cpu=args.cpu, paired=is_paired)
-        sys.stderr.write("#################### rerun_spades returned spades_failed = {}:\n".format(spades_failed))
-        if len(spades_failed) > 0:
-            with open("failed_spades.txt", 'w') as failed_spadefile:
-                failed_spadefile.write("\n".join(spades_failed))
+    failed_spadesfile_name = "failed_spades.txt"
+
+    if os.path.isfile(failed_spadesfile_name) and args.redos_only:
+        logger.debug("calling rerun_spades")###
+        spades_failed, spades_duds = rerun_spades(failed_spadesfile_name, cpu=args.cpu, paired=is_paired)
+        logger.debug("rerun_spades returned spades_failed = {}:\n".format(spades_failed))
     else:
-        spades_failed = spades_initial(args.genelist, cov_cutoff=args.cov_cutoff, cpu=args.cpu, kvals=args.kvals, paired=is_paired, timeout=args.timeout, unpaired=args.unpaired)
+        logger.debug("calling spades_initial with args.genelist = {}:\n".format(args.genelist))
+        spades_failed = spades_initial(args.genelist, cov_cutoff=args.cov_cutoff, cpu=args.cpu, kvals=args.kvals,
+                                       paired=is_paired, timeout=args.timeout, unpaired=args.unpaired)
+        logger.debug("spades_initial returned spades_failed = {}:\n".format(spades_failed))
 
-        if not args.suppress_rerun and len(spades_failed) > 0:
-            with open("failed_spades.txt", 'w') as failed_spadefile:
-                failed_spadefile.write("\n".join(spades_failed))
+    if len(spades_failed) == 0:
+        acbc.delete_file(failed_spadesfile_name)
+    else:
+        acbc.make_genelist_file_from_set(spades_failed, failed_spadesfile_name)
 
-            spades_failed, spades_duds = rerun_spades("failed_spades.txt", cov_cutoff=args.cov_cutoff, paired=is_paired, cpu=args.cpu)
-            if len(spades_failed) == 0:
-                sys.stderr.write("All redos completed successfully!\n")
-            else:
-                sys.exit(1)
-
-if __name__ == "__main__":main()
+if __name__ == "__main__":
+    main()

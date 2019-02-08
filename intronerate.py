@@ -15,14 +15,14 @@ from exonerate_hits import range_connectivity,tuple_overlap
 
 
 def get_contig_info():
-    '''Given the prefix of a run of HybSeqPipeline, retreive the stats from exonerate'''
+    '''Given the prefix of a run of HybSeqPipeline, retrieve the stats from exonerate'''
     statspath = "exonerate_stats.csv"
     contig_info = [x.rstrip().split(',') for x in open(statspath).readlines()]
     #print contig_info
     sorted_contig_stats = sorted(contig_info, key = lambda x: int(x[2]))
     #print sorted_contig_stats
     return sorted_contig_stats
-    
+
 def make_intron_supercontig(contig_info,gene,prefix,add_N = False):
     cap3contigs = SeqIO.to_dict(SeqIO.parse("../{}_contigs.fasta".format(gene),'fasta'))
     intron_supercontig = SeqRecord(Seq(''))
@@ -30,16 +30,16 @@ def make_intron_supercontig(contig_info,gene,prefix,add_N = False):
         if i[5] == "(+)":
             intron_supercontig += cap3contigs[i[0]]
         elif i[5] == "(-)":
-            intron_supercontig += cap3contigs[i[0]].reverse_complement()    
+            intron_supercontig += cap3contigs[i[0]].reverse_complement()
         else:
             sys.stderr.write("Strandedness not found!")
             sys.exit(1)
         if add_N and i != contig_info[-1]:
-            intron_supercontig += "NNNNNNNNNN"    
+            intron_supercontig += "NNNNNNNNNN"
     intron_supercontig.id = '{}-{}'.format(prefix,gene)
     intron_supercontig.description = ''
-    SeqIO.write(intron_supercontig,'sequences/intron/{}_supercontig.fasta'.format(gene),'fasta')    
-    
+    SeqIO.write(intron_supercontig,'sequences/intron/{}_supercontig.fasta'.format(gene),'fasta')
+
 def re_run_exonerate(gene,target="new_faa"):
     if target == "new_faa":
         exonerate_cmd = "exonerate -m protein2genome -q sequences/FAA/{}.FAA -t sequences/intron/{}_supercontig.fasta --verbose 0 --showalignment no --showvulgar no --showtargetgff yes > intronerate_raw.gff".format(gene, gene)
@@ -74,10 +74,10 @@ def longest_hit(hits):
             max_length = hit_length
             longest_hit = hrange
     return hrange
-    
+
 
 def score_filter(hits,score_multiplier=2):
-    '''Given the GFF hits with overlapping ranges, determine if one has a score far 
+    '''Given the GFF hits with overlapping ranges, determine if one has a score far
     exceeding the others and return that one, else return None'''
     print("Searching for hit with score {} times better\n".format(score_multiplier))
     scores = [int(x[0][5]) for x in hits]
@@ -104,10 +104,10 @@ def join_zones(hits):
             max_end = end
     hits[0][3] = str(min_start)
     hits[0][4] = str(max_end)
-    return hits[0]         
-            
-    
-    
+    return hits[0]
+
+
+
 def filter_gff(hits,merge=True):
     hits_to_keep = []
     hits = sorted(hits,key= lambda x: int(x[0][3]))
@@ -182,7 +182,7 @@ def filter_gff(hits,merge=True):
                     longest = longest_hit([hits[x] for x in overlapping_indicies])
                     if longest:
                         non_overlapping_indicies.append(longest)
-        
+
 
 #         for pair in overlapping_indicies:
 #             if int(gene_annotations[pair[0]][5]) > int(gene_annotations[pair[1]][5]):
@@ -193,10 +193,10 @@ def filter_gff(hits,merge=True):
 #                 non_overlapping_indicies.append(kept_indicies[-1])
         #print kept_indicies
         #print non_overlapping_indicies
-        return [hits[x] for x in sorted(non_overlapping_indicies)]#.sort()]    
-                
+        return [hits[x] for x in sorted(non_overlapping_indicies)]#.sort()]
+
     else:
-        return [hits[x] for x in kept_indicies]            
+        return [hits[x] for x in kept_indicies]
     #print [gene_annotations[x] for x in kept_indicies]
 
 def get_new_gff(kept_hits):
@@ -204,7 +204,7 @@ def get_new_gff(kept_hits):
     for hit in kept_hits:
         for line in hit:
             flatter_list.append("\t".join(line))
-    return "\n".join(flatter_list) + '\n'    
+    return "\n".join(flatter_list) + '\n'
 
 def remove_exons(gff_filename,supercontig_filename,mode="all"):
     '''Given a supercontig and corresponding annotation, remove the exon sequences. In "intron" mode, only return sequences specifically annotated as introns'''
@@ -221,11 +221,11 @@ def remove_exons(gff_filename,supercontig_filename,mode="all"):
     exonless_contig = SeqRecord(Seq(''),id=supercontig.id)
     start = 0
     for exon in range(len(exon_starts)):
-        exonless_contig += supercontig[start:exon_starts[exon]-1] 
+        exonless_contig += supercontig[start:exon_starts[exon]-1]
         start = exon_ends[exon]
-    exonless_contig += supercontig[start:]    
+    exonless_contig += supercontig[start:]
     exonless_contig.description = ''
-    return exonless_contig    
+    return exonless_contig
 
 def check_for_files(gene,prefix):
     '''Check to see if the files needed for intronerate are really present'''
@@ -241,7 +241,7 @@ def check_for_files(gene,prefix):
         return False
 def main():
     parser = argparse.ArgumentParser(description=helptext,formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("--genelist",help="Optional list of genes to retreive coverage. Default is to use genes_with_seqs.txt")
+    parser.add_argument("--genelist",help="Optional list of genes to retrieve coverage. Default is to use genes_with_seqs.txt")
     parser.add_argument("--prefix",help="Prefix of sample directory generated by HybSeqPipeline",required=True)
     parser.add_argument("--no-exonerate",help = "Don't re-run exonerate, use existing intronerate gff files.",action='store_true',default=False)
     parser.add_argument("--use_target",help="Align the supercontig to the original target sequences, rather than the newly generated FAA",default=False,action="store_true")
@@ -249,10 +249,10 @@ def main():
     parser.add_argument("--addN",help="Insert 10 Ns between the contigs when constructing the supercontig. Useful to identify where intron recovery fails.",default=False,action="store_true")
     #parser.add_argument("--introns-only",help = "In the intron.fasta file for each gene, only write regions annotated as introns by exonerate. Default: all non-exon regions are written to introns.fasta.",action="store_true",default=False)
     args=parser.parse_args()
-    
+
     if args.genelist:
         genelist_fn = os.path.abspath(args.genelist)
-    
+
     if len(sys.argv) < 2:
         print(helptext)
         sys.exit(1)
@@ -262,14 +262,14 @@ def main():
         basedir = os.getcwd()
         prefix = os.path.split(basedir)[1]
     else:
-        sys.stderr.write("Directory {} not found!\n".format(args.prefix))    
+        sys.stderr.write("Directory {} not found!\n".format(args.prefix))
 
     if args.genelist:
         genelist = [x.split()[0] for x in open(genelist_fn).readlines()]
     else:
         genelist = [x.split()[0] for x in open('genes_with_seqs.txt').readlines()]
 
-    with open("intron_stats.txt",'w') as intron_stats_file:    
+    with open("intron_stats.txt",'w') as intron_stats_file:
         full_gff = ''
         for gene in genelist:
             if check_for_files(gene,prefix):
@@ -292,17 +292,17 @@ def main():
                     num_introns = new_gff_string.count("intron\t")
                     intron_stats_file.write("{}\t{}\t{}\n".format(prefix,gene,num_introns))
                     sys.stderr.write("{} introns found for {}.\n".format(num_introns,gene))
-                
+
                     new_gff.write(new_gff_string)
                     full_gff += new_gff_string
                 exonless_contig = remove_exons("intronerate.gff","sequences/intron/{}_supercontig.fasta".format(gene))
                 SeqIO.write(exonless_contig,"sequences/intron/{}_introns.fasta".format(gene),'fasta')
-                
+
                 os.chdir(basedir)
             else:
                 sys.stderr.write("ERROR: Files not found for {} gene {}!\n".format(prefix,gene))
     with open("{}_genes.gff".format(prefix),'w') as all_gff:
-        all_gff.write(full_gff)        
+        all_gff.write(full_gff)
 
 
 
